@@ -26,14 +26,11 @@ library
         Data.SF.Core,
         Data.SF.Run,
         Data.SF.Time,
-        Data.SF.Combinators,
-        Data.SF.Hyperdrive,
-        Data.SF.Hyperdrive2
+        Data.SF.Combinators
     hs-source-dirs:   src
     ghc-options: -O2
     build-depends: 
-        vector,
-        template-haskell
+        vector
 
 executable bench
     import: common
