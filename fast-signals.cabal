@@ -1,0 +1,47 @@
+cabal-version:      3.0
+name:               fast-signals
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Simre1
+maintainer:         simre4775@gmail.com
+-- copyright:
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common common
+    ghc-options: -Wall
+    default-language: GHC2021
+    default-extensions:
+        DataKinds
+    build-depends:    
+        base ^>=4.17.2.1
+
+library
+    import: common
+    exposed-modules:  
+        Data.SF.Core,
+        Data.SF.Run,
+        Data.SF.Time,
+        Data.SF.Combinators,
+        Data.SF.Hyperdrive,
+        Data.SF.Hyperdrive2
+    hs-source-dirs:   src
+    ghc-options: -O2
+    build-depends: 
+        vector,
+        template-haskell
+
+executable bench
+    import: common
+    build-depends:
+        fast-signals,
+        Yampa,
+        dunai,
+        benchpress
+    hs-source-dirs:   bench
+    main-is: Main.hs
+    ghc-options: -O2
