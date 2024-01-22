@@ -10,7 +10,7 @@ import Prelude hiding (id, (.))
 -- 1. The setup phase is run once at the beginning and produces a run function
 -- 2. The run phase is run as often as you want
 -- 
--- The `r` argument is the environment for the setup phase. It may used to similar to the ReaderT pattern.
+-- The `r` argument is the environment for the setup phase. It may be used similar to the ReaderT pattern.
 newtype SF r a b = SF (r -> IO (a -> IO b))
 
 instance Functor (SF r a) where

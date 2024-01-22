@@ -16,7 +16,7 @@ reactimate sf env = do
 
 -- | Sample a signal function until the input list is exhausted.
 --
--- | Beware that the whole [b] needs to be produced before it can return! This can lead to bad performance
+-- Beware that the whole [b] needs to be produced before it can return! This can lead to bad performance
 -- in terms of memory and runtime.
 sample :: SF r a b -> r -> [a] -> IO [b]
 sample sf env inputs = do
