@@ -1,11 +1,15 @@
-module Data.SF.Time (Time, withTime, withFixedTime, deltaTime, currentTime, integrate) where
+module Data.SF.Time (Time, withTime, withFixedTime, TimeEnv (..), deltaTime, currentTime, integrate, limitSampleRate) where
 
 import Control.Arrow
 import Control.Category (Category (id))
+import Control.Concurrent (threadDelay)
+import Control.Monad (when)
 import Data.IORef (IORef, newIORef, readIORef)
-import Data.SF.Combinators (feedback)
+import Data.SF.Combinators (feedback, identity)
 import Data.SF.Core
-import GHC.Clock (getMonotonicTime)
+import Data.Word (Word64)
+import Debug.Trace (traceShowId)
+import GHC.Clock (getMonotonicTime, getMonotonicTimeNSec)
 import GHC.IORef (writeIORef)
 import GHC.Records
 import Prelude hiding (id)
@@ -15,6 +19,8 @@ data Time = Time
     cTime :: {-# UNPACK #-} !(IORef Double)
   }
   deriving (Eq)
+
+newtype TimeEnv = TimeEnv {time :: Time} deriving (Eq)
 
 -- | Add a 'Time' to your environment based on real data.
 -- 'Time' contains the total runtime as well as a delta time which is the time between executions of signal functions.
@@ -74,3 +80,26 @@ integrate scale =
           let !next = previous + scale dt value in (next, next)
       )
 {-# INLINE integrate #-}
+
+-- | Limit the real world samples per second. The first argument is samples per second.
+limitSampleRate :: Double -> SF r a b -> SF r a b
+limitSampleRate frameTime (SF sf) = SF $ \r -> do
+  f <- sf r
+  timeRef <- newIORef 0
+  pure $ \a -> do
+    b <- f a
+    oldTime <- readIORef timeRef
+    currentTime <- getMonotonicTimeNSec
+    let !waitTime = nanos - fromIntegral (currentTime - oldTime)
+    if waitTime > 0
+      then do
+        writeIORef timeRef $ oldTime + nanosW64
+        threadDelay (waitTime `quot` 1000)
+      else writeIORef timeRef currentTime
+    pure b
+  where
+    nanos :: Int
+    nanos = round $ frameTime * 10 ^ 9
+    nanosW64 :: Word64
+    nanosW64 = round $ frameTime * 10 ^ 9
+{-# INLINE limitSampleRate #-}

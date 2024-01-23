@@ -26,11 +26,14 @@ library
         Data.SF.Core,
         Data.SF.Run,
         Data.SF.Time,
-        Data.SF.Combinators
+        Data.SF.Combinators,
+        Data.SF.Sampling
     hs-source-dirs:   src
     ghc-options: -O2
     build-depends: 
-        vector
+        containers,
+        vector,
+        async
 
 executable bench
     import: common
