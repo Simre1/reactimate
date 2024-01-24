@@ -8,7 +8,7 @@ import Data.Sequence (Seq)
 import Data.Sequence qualified as S
 import GHC.Records (HasField)
 
--- | Resamples a SF with the first argument as the specified `frameTime` within the same thread. The resampled SF will have a fixed time delta of `frameTime`.
+-- | Resamples a SF with the first argument as the specified @frameTime@ within the same thread. The resampled SF will have a fixed time delta of @frameTime@.
 -- The inputs and outputs are collected in a sequence.
 resample :: (HasField "time" r1 Time) => Double -> (r1 -> Time -> r2) -> SF r2 (Seq a) b -> SF r1 a (Seq b)
 resample frameTime setTime sf = SF $ \r -> do
@@ -32,7 +32,7 @@ resample frameTime setTime sf = SF $ \r -> do
 
           when (now >= nextSampleTime) $ do
             inputs <- readIORef inputRef
-            writeIORef inputRef (S.empty)
+            writeIORef inputRef S.empty
             b <- f inputs
             modifyIORef' outputRef (S.:|> b)
             writeIORef nextSampleTimeRef (nextSampleTime + frameTime)

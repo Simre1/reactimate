@@ -5,13 +5,13 @@ import Control.Category
 import Control.Monad ((>=>))
 import Prelude hiding (id, (.))
 
--- | A signal function takes `a`s and produces `b`. 
+-- | A signal function takes @a@s and produces @b@. 
 -- Signal functions have a __setup__ and a __run__ phase:
 -- 
 -- 1. The setup phase is run once at the beginning and produces a run function
 -- 2. The run phase is run as often as you want
 -- 
--- The `r` argument is the environment for the setup phase. It may be used similar to the ReaderT pattern.
+-- The @r@ argument is the environment for the setup phase. It may be used similar to the ReaderT pattern.
 newtype SF r a b = SF (r -> IO (a -> IO b))
 
 instance Functor (SF r a) where
@@ -86,7 +86,7 @@ modifyEnv f (SF sf) = SF $ \r1 -> do
   sf r2
 {-# INLINE modifyEnv #-}
 
--- | Unwrap a signal function and feed in the environment `r`. The outer `IO` is the setup, which produces the run action. 
+-- | Unwrap a signal function and feed in the environment @r@. The outer `IO` is the setup, which produces the run action. 
 unSF :: SF r a b -> r -> IO (a -> IO b)
 unSF (SF sf) = sf
 {-# INLINE unSF #-}

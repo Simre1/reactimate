@@ -1,7 +1,7 @@
 # Fast signals
 
 `fast-signals` is a library implementing the AFRP paradigm.
-It prioritizes performance at the cost of some purity.
+It prioritizes performance at the cost of some purity and also integrates some ideas from pull-based FRP.
 
 ## Microbenchmarks
 
