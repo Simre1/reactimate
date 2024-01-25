@@ -101,10 +101,7 @@ accumulateEvent accumulate initial (Event sf hook) = SF $ \fin r -> mdo
   hook fin r $ \x -> do
     a <- f x
     modifyIORef' ref (`accumulate` a)
-  pure $ \_ -> do
-    readIORef ref
-
--- TODO: If events are no longer used, they need to be cleaned up!
+  pure $ \_ -> readIORef ref
 
 -- | Fold all events which happened since the last sample.
 --
@@ -116,10 +113,7 @@ sampleEvent accumulate initial (Event sf hook) = SF $ \fin r -> mdo
   hook fin r $ \x -> do
         a <- f x
         modifyIORef' ref (`accumulate` a)
-  pure $ \_ -> do
-    as <- readIORef ref
-    writeIORef ref initial
-    pure as
+  pure $ \_ -> atomicModifyIORef' ref (initial, )
 
 -- | Grab all unseen events as a list
 sampleEventAsList :: Event r a -> SF r () [a]
