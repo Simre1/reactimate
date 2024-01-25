@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo #-}
+
 module Data.SF.Event where
 
 import Control.Applicative (liftA2)
@@ -15,7 +17,7 @@ import Data.SF.Core
 data Event r a where
   Event ::
     { sf :: !(SF r x a),
-      hook :: !(r -> (x -> IO ()) -> IO (IO ()))
+      hook :: Finalizer -> r -> (x -> IO ()) -> IO ()
     } ->
     Event r a
 
@@ -30,15 +32,14 @@ instance Functor (Event r) where
   {-# INLINE fmap #-}
 
 instance Semigroup (Event r a) where
-  (Event sf1 hook1) <> (Event sf2 hook2) = Event identity $ \r push -> do
-    f1 <- unSF sf1 r
-    f2 <- unSF sf2 r
-    unHook1 <- hook1 r (f1 >=> push)
-    unHook2 <- hook2 r (f2 >=> push)
-    pure $ unHook1 >> unHook2
+  (Event sf1 hook1) <> (Event sf2 hook2) = Event identity $ \fin r push -> do
+    f1 <- unSF sf1 fin r
+    f2 <- unSF sf2 fin r
+    hook1 fin r (f1 >=> push)
+    hook2 fin r (f2 >=> push)
 
 instance Monoid (Event r a) where
-  mempty = Event identity $ \_ _ -> pure (pure ())
+  mempty = Event identity $ \_ _ _ -> pure ()
 
 instance Functor (Behavior r) where
   fmap f (Behavior event a) = Behavior (fmap f event) (f a)
@@ -50,71 +51,71 @@ instance Applicative (Behavior r) where
     (Behavior (Event sfA hookA) initialValueA)
     (Behavior (Event sfB hookB) initialValueB) = Behavior event (f initialValueA initialValueB)
       where
-        event = Event identity $ \r trigger -> do
+        event = Event identity $ \fin r trigger -> do
           refA <- newIORef initialValueA
           refB <- newIORef initialValueB
 
-          fA <- unSF sfA r
-          fB <- unSF sfB r
+          fA <- unSF sfA fin r
+          fB <- unSF sfB fin r
 
-          unHookA <- hookA r $ \x -> do
+          hookA fin r $ \x -> do
             a <- fA x
             writeIORef refA a
             b <- readIORef refB
             trigger $ f a b
-          unHookB <- hookB r $ \x -> do
+          hookB fin r $ \x -> do
             b <- fB x
             writeIORef refB b
             a <- readIORef refA
             trigger $ f a b
 
-          pure $ unHookA >> unHookB
-
 -- | Emits an event and then waits @frameTime@ seconds.
 -- If producing events is little work, this should approximate a frequency @1/frameTime@.
 pulse :: Double -> a -> Event r a
-pulse frameTime a = Event identity $ \_ push -> do
+pulse frameTime a = Event identity $ \fin _ push -> do
   asyncRef <- async $ forever $ do
     push a
     threadDelay $ round (frameTime * 1000000)
-  pure $ cancel asyncRef
+  addFinalizer fin $ cancel asyncRef
 
--- | Create an event from a callback. The first argument should take a @a -> IO ()@ function and use it to trigger events. 
--- The return @IO ()@ action should contain cleanup code to remove the callback.
+-- | Create an event from a callback. The first argument should take a @a -> IO ()@ function and use it to trigger events.
+--
+-- You can also use the environment, though you need to keep thread-safety in mind. If you need to run some clean-up code,
+-- add it to the `Finalizer`.
 --
 -- @
 -- callback $ \\triggerEvent -> do
---   cleanUp <- someFunctionTakingCallback triggerEvent 
+--   cleanUp <- someFunctionTakingCallback triggerEvent
 --   pure cleanUp
 -- @
-callback :: ((a -> IO ()) -> IO (IO ())) -> Event r a
-callback hook = Event identity (const hook)
+callback :: (Finalizer -> r -> (a -> IO ()) -> IO ()) -> Event r a
+callback = Event identity
 
--- TODO: If events are no longer used, they need to be cleaned up!
 -- | Fold an event over time and return the latest value.
 --
 -- __The accumulator carries over to the next sampling step.__
 accumulateEvent :: (b -> a -> b) -> b -> Event r a -> SF r () b
-accumulateEvent accumulate initial (Event sf hook) = SF $ \r -> do
+accumulateEvent accumulate initial (Event sf hook) = SF $ \fin r -> mdo
   ref <- newIORef initial
-  f <- unSF sf r
-  unHook <- hook r $ \x -> do
+  f <- unSF sf fin r
+  hook fin r $ \x -> do
     a <- f x
     modifyIORef' ref (`accumulate` a)
   pure $ \_ -> do
     readIORef ref
 
 -- TODO: If events are no longer used, they need to be cleaned up!
+
 -- | Fold all events which happened since the last sample.
--- 
+--
 -- __The accumulator will reset to the initial value at each sampling.__
 sampleEvent :: (b -> a -> b) -> b -> Event r a -> SF r () b
-sampleEvent accumulate initial (Event sf hook) = SF $ \r -> do
+sampleEvent accumulate initial (Event sf hook) = SF $ \fin r -> mdo
   ref <- newIORef initial
-  f <- unSF sf r
-  unHook <- hook r $ \x -> do
-    a <- f x
-    modifyIORef' ref (`accumulate` a)
+  f <- unSF sf fin r
+  hook fin r $ \x -> do
+        a <- f x
+        modifyIORef' ref (`accumulate` a)
   pure $ \_ -> do
     as <- readIORef ref
     writeIORef ref initial
@@ -124,11 +125,11 @@ sampleEvent accumulate initial (Event sf hook) = SF $ \r -> do
 sampleEventAsList :: Event r a -> SF r () [a]
 sampleEventAsList = fmap ($ []) . sampleEvent (\f a -> f . (a :)) id
 
--- | Map a signal function over an event. 
+-- | Map a signal function over an event.
 eventMap :: SF r a b -> Event r a -> Event r b
 eventMap sf2 (Event sf1 hook) = Event (sf1 >>> sf2) hook
 
--- | Sample a `Behavior`. 
+-- | Sample a `Behavior`.
 sampleBehavior :: Behavior r a -> SF r () a
 sampleBehavior (Behavior event initialValue) = SF $ \r -> do
   unSF (sampleEvent (\_ x -> x) initialValue event) r

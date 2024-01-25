@@ -11,12 +11,12 @@ import GHC.Records (HasField)
 -- | Resamples a SF with the first argument as the specified @frameTime@ within the same thread. The resampled SF will have a fixed time delta of @frameTime@.
 -- The inputs and outputs are collected in a sequence.
 resample :: (HasField "time" r1 Time) => Double -> (r1 -> Time -> r2) -> SF r2 (Seq a) b -> SF r1 a (Seq b)
-resample frameTime setTime sf = SF $ \r -> do
-  f <- unSF (withFixedTime frameTime setTime sf) r
+resample frameTime setTime sf = SF $ \fin r -> do
+  f <- unSF (withFixedTime frameTime setTime sf) fin r
   nextSampleTimeRef <- newIORef 0
   inputRef <- newIORef S.empty
   outputRef <- newIORef S.empty
-  ct <- unSF currentTime r
+  ct <- unSF currentTime fin r
 
   pure $ \a -> do
     modifyIORef' inputRef (S.:|> a)

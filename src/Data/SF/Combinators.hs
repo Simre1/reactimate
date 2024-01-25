@@ -35,17 +35,17 @@ constant = pure
 --
 -- Beware that this function should not be used when @c@ has many (~dozens) cases, since the setup phase will be run for each case.
 caseOf :: forall c r a b. (Bounded c, Enum c) => SF r a c -> (c -> SF r a b) -> SF r a b
-caseOf decider makeSF = SF $ \r -> do
+caseOf decider makeSF = SF $ \fin r -> do
   when (fromEnum (maxBound :: c) - fromEnum (minBound :: c) > 100) $
     fail "You probably do not want to use `caseSF` with so many cases. Use `manyCaseSF` if you really want to."
-  coerce (manyCaseSF decider makeSF) r
+  unSF (manyCaseSF decider makeSF) fin r
 {-# INLINE caseOf #-}
 
 -- | Same as `caseOf` but will not error when you have a @c@ with many cases.
 manyCaseSF :: (Bounded c, Enum c) => SF r a c -> (c -> SF r a b) -> SF r a b
-manyCaseSF (SF makeDecider) makeSF = SF $ \r -> do
-  decide <- makeDecider r
-  sfs <- V.fromList <$> traverse (($ r) . coerce . makeSF) [minBound .. maxBound]
+manyCaseSF (SF makeDecider) makeSF = SF $ \fin r -> do
+  decide <- makeDecider fin r
+  sfs <- V.fromList <$> traverse (\c -> unSF (makeSF c) fin r) [minBound .. maxBound]
   pure $ \a -> do
     c <- decide a
     let step = sfs V.! fromEnum c
@@ -54,8 +54,8 @@ manyCaseSF (SF makeDecider) makeSF = SF $ \r -> do
 
 -- | Feeds the output state back as input. The state @s@ is strict.
 feedback :: s -> SF r (a, s) (b, s) -> SF r a b
-feedback !initial (SF sf) = SF $ \r -> do
-  f <- sf r
+feedback !initial (SF sf) = SF $ \fin r -> do
+  f <- sf fin r
   stateRef <- newIORef initial
   pure $ \a -> do
     !s <- readIORef stateRef
@@ -66,8 +66,8 @@ feedback !initial (SF sf) = SF $ \r -> do
 
 -- | Feeds the output state back as input. The state @s@ is lazy, so beware space leaks.
 lazyFeedback :: s -> SF r (a, s) (b, s) -> SF r a b
-lazyFeedback initial (SF sf) = SF $ \r -> do
-  f <- sf r
+lazyFeedback initial (SF sf) = SF $ \fin r -> do
+  f <- sf fin r
   stateRef <- newIORef initial
   pure $ \a -> do
     s <- readIORef stateRef
@@ -78,7 +78,7 @@ lazyFeedback initial (SF sf) = SF $ \r -> do
 
 -- | Delay the execution by one sample
 delaySample :: a -> SF r a a
-delaySample initial = SF $ \_ -> do
+delaySample initial = SF $ \_ _ -> do
   delayRef <- newIORef initial
   pure $ \a' -> do
     a <- readIORef delayRef
@@ -97,9 +97,9 @@ sumUp = scan (+) 0
 {-# INLINE sumUp #-}
 
 -- | Computes a moving mean of the input values
--- 
--- The first parameter @alpha@ must be in the intervall [0,1] and controls how strongly recent samples are weighted. 
+--
+-- The first parameter @alpha@ must be in the intervall [0,1] and controls how strongly recent samples are weighted.
 -- Small @alpha@ near 0 leads to slower but smoother convergence. Big @alpha@ leads to quick convergence but a jagged curve.
 movingMean :: (Fractional a) => a -> SF r a a
 movingMean alpha = scan (\b a -> b + alpha * (a - b)) 0
-{-# INLINE movingMean#-}
+{-# INLINE movingMean #-}

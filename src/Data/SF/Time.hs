@@ -25,12 +25,12 @@ newtype TimeEnv = TimeEnv {time :: Time} deriving (Eq)
 -- | Add a 'Time' to your environment based on real data.
 -- 'Time' contains the total runtime as well as a delta time which is the time between executions of signal functions.
 withTime :: (r1 -> Time -> r2) -> SF r2 a b -> SF r1 a b
-withTime f (SF sf) = SF $ \r1 -> do
+withTime f (SF sf) = SF $ \fin r1 -> do
   !buildTime <- getMonotonicTime
   deltaTime <- newIORef 0
   time <- newIORef buildTime
   let r2 = f r1 (Time deltaTime time)
-  step <- sf r2
+  step <- sf fin r2
   pure $ \a -> do
     oldTime <- readIORef time
     !newTime <- getMonotonicTime
@@ -44,11 +44,11 @@ withTime f (SF sf) = SF $ \r1 -> do
 -- | Add a 'Time' to your environment based on a fixed delta. Each execution will have the same delta and the runtime
 -- will be deltaTime * runNumber.
 withFixedTime :: Double -> (r1 -> Time -> r2) -> SF r2 a b -> SF r1 a b
-withFixedTime fixedDelta f (SF sf) = SF $ \r1 -> do
+withFixedTime fixedDelta f (SF sf) = SF $ \fin r1 -> do
   deltaTime <- newIORef fixedDelta
   time <- newIORef 0
   let r2 = f r1 (Time deltaTime time)
-  step <- sf r2
+  step <- sf fin r2
   pure $ \a -> do
     oldTime <- readIORef time
     let !newTime = oldTime + fixedDelta
@@ -83,8 +83,8 @@ integrate scale =
 
 -- | Limit the real world samples per second. The first argument is samples per second.
 limitSampleRate :: Double -> SF r a b -> SF r a b
-limitSampleRate frameTime (SF sf) = SF $ \r -> do
-  f <- sf r
+limitSampleRate frameTime (SF sf) = SF $ \fin r -> do
+  f <- sf fin r
   timeRef <- newIORef 0
   pure $ \a -> do
     b <- f a
