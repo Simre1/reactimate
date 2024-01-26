@@ -1,11 +1,11 @@
-module Data.SF.Delay where
+module Data.Signal.Delay where
 
 import Data.IORef
-import Data.SF.Core
+import Data.Signal.Core
 
 -- | Delay the execution by one sample
-delaySample :: a -> SF r a a
-delaySample initial = SF $ \_ _ -> do
+delaySample :: a -> Signal r a a
+delaySample initial = Signal $ \_ _ -> do
   delayRef <- newIORef initial
   pure $ \a' -> do
     a <- readIORef delayRef

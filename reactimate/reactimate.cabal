@@ -1,5 +1,5 @@
 cabal-version:      3.0
-name:               fast-signals
+name:               reactimate
 version:            0.1.0.0
 -- synopsis:
 -- description:
@@ -23,17 +23,17 @@ common common
 library
     import: common
     exposed-modules:  
-        Data.SF,
-        Data.SF.Core,
-        Data.SF.Run,
-        Data.SF.Time,
-        Data.SF.Sampling,
-        Data.SF.Stateful,
-        Data.SF.Switching,
-        Data.SF.Environment,
-        Data.SF.Basic,
-        Data.SF.Event,
-        Data.SF.Delay
+        Data.Signal,
+        Data.Signal.Core,
+        Data.Signal.Run,
+        Data.Signal.Time,
+        Data.Signal.Sampling,
+        Data.Signal.Stateful,
+        Data.Signal.Switching,
+        Data.Signal.Environment,
+        Data.Signal.Basic,
+        Data.Signal.Event,
+        Data.Signal.Delay
     hs-source-dirs:   src
     ghc-options: -O2
     build-depends: 
@@ -44,7 +44,7 @@ library
 executable bench
     import: common
     build-depends:
-        fast-signals,
+        reactimate,
         Yampa,
         dunai,
         benchpress

@@ -1,10 +1,10 @@
 {-# LANGUAGE RecursiveDo #-}
 
-module Data.SF.Switching where
+module Data.Signal.Switching where
 
 import Control.Monad (when)
 import Data.IORef
-import Data.SF.Core
+import Data.Signal.Core
 import Data.Vector qualified as V
 
 -- | 'caseOf' is a powerful combinator to implement switching behavior. It is similar to case expressions, but for signal functions.
@@ -14,37 +14,37 @@ import Data.Vector qualified as V
 -- they keep their state.
 --
 -- Beware that this function should not be used when @c@ has many (~dozens) cases, since the setup phase will be run for each case.
-caseOf :: forall c r a b. (Bounded c, Enum c) => SF r a c -> (c -> SF r a b) -> SF r a b
-caseOf decider makeSF = SF $ \fin r -> do
+caseOf :: forall c r a b. (Bounded c, Enum c) => Signal r a c -> (c -> Signal r a b) -> Signal r a b
+caseOf decider makeSignal = Signal $ \fin r -> do
   when (fromEnum (maxBound :: c) - fromEnum (minBound :: c) > 100) $
-    fail "You probably do not want to use `caseSF` with so many cases. Use `manyCaseSF` if you really want to."
-  unSF (manyCaseSF decider makeSF) fin r
+    fail "You probably do not want to use `caseSignal` with so many cases. Use `manyCaseSignal` if you really want to."
+  unSignal (manyCaseSignal decider makeSignal) fin r
 {-# INLINE caseOf #-}
 
 -- | Same as `caseOf` but will not error when you have a @c@ with many cases.
-manyCaseSF :: (Bounded c, Enum c) => SF r a c -> (c -> SF r a b) -> SF r a b
-manyCaseSF (SF makeDecider) makeSF = SF $ \fin r -> do
+manyCaseSignal :: (Bounded c, Enum c) => Signal r a c -> (c -> Signal r a b) -> Signal r a b
+manyCaseSignal (Signal makeDecider) makeSignal = Signal $ \fin r -> do
   decide <- makeDecider fin r
-  sfs <- V.fromList <$> traverse (\c -> unSF (makeSF c) fin r) [minBound .. maxBound]
+  signals <- V.fromList <$> traverse (\c -> unSignal (makeSignal c) fin r) [minBound .. maxBound]
   pure $ \a -> do
     c <- decide a
-    let step = sfs V.! fromEnum c
+    let step = signals V.! fromEnum c
     step a
-{-# INLINE manyCaseSF #-}
+{-# INLINE manyCaseSignal #-}
 
 -- | Switch out a signal function with another when you produce a @Just c@ value.
 -- The next signal function will become active in the next iteration.
-switch :: SF r a (b, Maybe c) -> (c -> SF r a b) -> SF r a b
-switch sf kont = SF $ \fin r -> mdo
+switch :: Signal r a (b, Maybe c) -> (c -> Signal r a b) -> Signal r a b
+switch signal kont = Signal $ \fin r -> mdo
   newFin <- newFinalizer
-  f <- unSF sf newFin r
+  f <- unSignal signal newFin r
 
   stepRef <- newIORef $ \a -> do
     (b, maybeC) <- f a
     case maybeC of
       Nothing -> pure b
       Just c -> do
-        newStep <- unSF (kont c) fin r
+        newStep <- unSignal (kont c) fin r
         writeIORef stepRef newStep
         runFinalizer newFin
         pure b

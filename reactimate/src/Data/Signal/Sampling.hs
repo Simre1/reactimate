@@ -1,26 +1,26 @@
-module Data.SF.Sampling where
+module Data.Signal.Sampling where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Monad (forever, when)
 import Data.IORef
-import Data.SF.Core
-import Data.SF.Environment (mapEnv)
-import Data.SF.Time
+import Data.Signal.Core
+import Data.Signal.Environment (mapEnv)
+import Data.Signal.Time
 import Data.Sequence (Seq)
 import Data.Sequence qualified as S
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
 
--- | Resamples a SF with the first argument as the specified @frameTime@ within the same thread. The resampled SF will have a fixed time delta of @frameTime@.
+-- | Resamples a Signal with the first argument as the specified @frameTime@ within the same thread. The resampled Signal will have a fixed time delta of @frameTime@.
 -- The inputs and outputs are collected in a sequence.
-resample :: Double -> (r1 -> Time) -> (r1 -> Time -> r2) -> SF r2 (Seq a) b -> SF r1 a (Seq b)
-resample frameTime getTime setTime sf = SF $ \fin r -> do
-  f <- unSF (withFixedTime frameTime setTime sf) fin r
+resample :: Double -> (r1 -> Time) -> (r1 -> Time -> r2) -> Signal r2 (Seq a) b -> Signal r1 a (Seq b)
+resample frameTime getTime setTime signal = Signal $ \fin r -> do
+  f <- unSignal (withFixedTime frameTime setTime signal) fin r
   nextSampleTimeRef <- newIORef 0
   inputRef <- newIORef S.empty
   outputRef <- newIORef S.empty
-  ct <- unSF (mapEnv getTime currentTime) fin r
+  ct <- unSignal (mapEnv getTime currentTime) fin r
 
   pure $ \a -> do
     modifyIORef' inputRef (S.:|> a)
@@ -52,9 +52,9 @@ resample frameTime getTime setTime sf = SF $ \fin r -> do
 
 -- Keep in mind that the environment is shared. Timing information from the original thread will be __wrong__ and must be replaced if needed.
 -- Also, some __environments might not be thread-safe__.
-resampleInThread :: SF r (Seq a) b -> SF r a (Seq b)
-resampleInThread sf = SF $ \fin r -> do
-  f <- unSF sf fin r
+resampleInThread :: Signal r (Seq a) b -> Signal r a (Seq b)
+resampleInThread signal = Signal $ \fin r -> do
+  f <- unSignal signal fin r
   inputRef <- newIORef S.empty
   outputRef <- newIORef S.empty
 
@@ -70,9 +70,9 @@ resampleInThread sf = SF $ \fin r -> do
     atomicModifyIORef' outputRef (S.empty,)
 
 -- | Limit the real world samples per second. The first argument is samples per second.
-limitSampleRate :: Double -> SF r a b -> SF r a b
-limitSampleRate frameTime (SF sf) = SF $ \fin r -> do
-  f <- sf fin r
+limitSampleRate :: Double -> Signal r a b -> Signal r a b
+limitSampleRate frameTime (Signal signal) = Signal $ \fin r -> do
+  f <- signal fin r
   timeRef <- newIORef 0
   pure $ \a -> do
     b <- f a

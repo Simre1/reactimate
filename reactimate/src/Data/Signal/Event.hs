@@ -1,6 +1,6 @@
 {-# LANGUAGE RecursiveDo #-}
 
-module Data.SF.Event where
+module Data.Signal.Event where
 
 import Control.Applicative (liftA2)
 import Control.Arrow ((>>>))
@@ -8,15 +8,15 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad (forever, (>=>))
 import Data.IORef
-import Data.SF.Core
-import Data.SF.Basic (identity)
+import Data.Signal.Core
+import Data.Signal.Basic (identity)
 
--- | Events are like @SF () a@, they produce values of @a@ and require no input.
+-- | Events are like @Signal () a@, they produce values of @a@ and require no input.
 -- Events occure at some unknown time, so they cannot simply be sampled with run functions like 'reactimate'.
--- Instead, @Event r a@ is a @SF r () a@ which is sampled independently from the main loop when the event happens.
+-- Instead, @Event r a@ is a @Signal r () a@ which is sampled independently from the main loop when the event happens.
 data Event r a where
   Event ::
-    { sf :: !(SF r x a),
+    { signal :: !(Signal r x a),
       hook :: Finalizer -> r -> (x -> IO ()) -> IO ()
     } ->
     Event r a
@@ -28,13 +28,13 @@ data Behavior r a = Behavior
   }
 
 instance Functor (Event r) where
-  fmap f (Event sf hook) = Event (fmap f sf) hook
+  fmap f (Event signal hook) = Event (fmap f signal) hook
   {-# INLINE fmap #-}
 
 instance Semigroup (Event r a) where
-  (Event sf1 hook1) <> (Event sf2 hook2) = Event identity $ \fin r push -> do
-    f1 <- unSF sf1 fin r
-    f2 <- unSF sf2 fin r
+  (Event signal1 hook1) <> (Event signal2 hook2) = Event identity $ \fin r push -> do
+    f1 <- unSignal signal1 fin r
+    f2 <- unSignal signal2 fin r
     hook1 fin r (f1 >=> push)
     hook2 fin r (f2 >=> push)
 
@@ -48,15 +48,15 @@ instance Applicative (Behavior r) where
   pure = Behavior mempty
   liftA2
     f
-    (Behavior (Event sfA hookA) initialValueA)
-    (Behavior (Event sfB hookB) initialValueB) = Behavior event (f initialValueA initialValueB)
+    (Behavior (Event signalA hookA) initialValueA)
+    (Behavior (Event signalB hookB) initialValueB) = Behavior event (f initialValueA initialValueB)
       where
         event = Event identity $ \fin r trigger -> do
           refA <- newIORef initialValueA
           refB <- newIORef initialValueB
 
-          fA <- unSF sfA fin r
-          fB <- unSF sfB fin r
+          fA <- unSignal signalA fin r
+          fB <- unSignal signalB fin r
 
           hookA fin r $ \x -> do
             a <- fA x
@@ -94,10 +94,10 @@ callback = Event identity
 -- | Fold an event over time and return the latest value.
 --
 -- __The accumulator carries over to the next sampling step.__
-accumulateEvent :: (b -> a -> b) -> b -> Event r a -> SF r () b
-accumulateEvent accumulate initial (Event sf hook) = SF $ \fin r -> mdo
+accumulateEvent :: (b -> a -> b) -> b -> Event r a -> Signal r () b
+accumulateEvent accumulate initial (Event signal hook) = Signal $ \fin r -> mdo
   ref <- newIORef initial
-  f <- unSF sf fin r
+  f <- unSignal signal fin r
   hook fin r $ \x -> do
     a <- f x
     modifyIORef' ref (`accumulate` a)
@@ -106,27 +106,27 @@ accumulateEvent accumulate initial (Event sf hook) = SF $ \fin r -> mdo
 -- | Fold all events which happened since the last sample.
 --
 -- __The accumulator will reset to the initial value at each sampling.__
-sampleEvent :: (b -> a -> b) -> b -> Event r a -> SF r () b
-sampleEvent accumulate initial (Event sf hook) = SF $ \fin r -> mdo
+sampleEvent :: (b -> a -> b) -> b -> Event r a -> Signal r () b
+sampleEvent accumulate initial (Event signal hook) = Signal $ \fin r -> mdo
   ref <- newIORef initial
-  f <- unSF sf fin r
+  f <- unSignal signal fin r
   hook fin r $ \x -> do
         a <- f x
         modifyIORef' ref (`accumulate` a)
   pure $ \_ -> atomicModifyIORef' ref (initial, )
 
 -- | Grab all unseen events as a list
-sampleEventAsList :: Event r a -> SF r () [a]
+sampleEventAsList :: Event r a -> Signal r () [a]
 sampleEventAsList = fmap ($ []) . sampleEvent (\f a -> f . (a :)) id
 
 -- | Map a signal function over an event.
-eventMap :: SF r a b -> Event r a -> Event r b
-eventMap sf2 (Event sf1 hook) = Event (sf1 >>> sf2) hook
+eventMap :: Signal r a b -> Event r a -> Event r b
+eventMap signal2 (Event signal1 hook) = Event (signal1 >>> signal2) hook
 
 -- | Sample a `Behavior`.
-sampleBehavior :: Behavior r a -> SF r () a
-sampleBehavior (Behavior event initialValue) = SF $ \r -> do
-  unSF (sampleEvent (\_ x -> x) initialValue event) r
+sampleBehavior :: Behavior r a -> Signal r () a
+sampleBehavior (Behavior event initialValue) = Signal $ \r -> do
+  unSignal (sampleEvent (\_ x -> x) initialValue event) r
 
 -- | Hold the value of an `Event` to a `Behavior` with initial value @a@.
 holdEvent :: a -> Event r a -> Behavior r a

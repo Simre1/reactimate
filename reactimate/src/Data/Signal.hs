@@ -1,7 +1,7 @@
--- | @fast-signals@ implements signal which are well suited for simulations, game loops and complicated stream processing.
+-- | @reactimate@ implements signal which are well suited for simulations, game loops and complicated stream processing.
 -- It's also possible to react to events as they are happening and integrate them into signal functions.
-module Data.SF
-  ( SF,
+module Data.Signal
+  ( Signal,
 
     -- * Basic signals
     identity,
@@ -60,13 +60,13 @@ module Data.SF
   )
 where
 
-import Data.SF.Basic
-import Data.SF.Core
-import Data.SF.Delay
-import Data.SF.Environment
-import Data.SF.Event
-import Data.SF.Run
-import Data.SF.Sampling
-import Data.SF.Stateful
-import Data.SF.Switching
-import Data.SF.Time
+import Data.Signal.Basic
+import Data.Signal.Core
+import Data.Signal.Delay
+import Data.Signal.Environment
+import Data.Signal.Event
+import Data.Signal.Run
+import Data.Signal.Sampling
+import Data.Signal.Stateful
+import Data.Signal.Switching
+import Data.Signal.Time

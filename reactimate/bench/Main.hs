@@ -2,9 +2,9 @@ import Control.Arrow (Arrow (..))
 import Control.Category ((>>>))
 import Data.MonadicStreamFunction qualified as MSF
 import Data.MonadicStreamFunction.InternalCore qualified as MSF
-import Data.SF.Run qualified as SF
-import Data.SF.Stateful qualified as SF
-import Data.SF.Time qualified as SF
+import Data.Signal.Run qualified as Signal
+import Data.Signal.Stateful qualified as Signal
+import Data.Signal.Time qualified as Signal
 import FRP.Yampa qualified as Y
 import Test.BenchPress (benchMany)
 import Data.Foldable (Foldable(..))
@@ -21,9 +21,9 @@ yampaCountBench = do
     (\_ !b -> if b == 0 then pure True else pure False)
     (Y.loopPre count (arr (\((), !x) -> (x - 1, x - 1))))
 
-sfCountBench :: IO ()
-sfCountBench = do
-  !x <- SF.reactimate (SF.feedback count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)) ()
+signalCountBench :: IO ()
+signalCountBench = do
+  !x <- Signal.reactimate (Signal.feedback count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)) ()
   pure ()
 
 msfCountBench :: IO ()
@@ -32,8 +32,8 @@ msfCountBench = do
   pure ()
   where
     reactimate :: MSF.MSF IO () (Maybe a) -> IO a
-    reactimate msf = do
-      (b, next) <- MSF.unMSF msf ()
+    reactimate mSignal = do
+      (b, next) <- MSF.unMSF mSignal ()
       case b of
         Nothing -> reactimate next
         Just x -> pure x
@@ -46,13 +46,13 @@ yampaIntegrateBench = do
   !x <- pure $ last (Y.embed (pure (1 :: Double) >>> Y.integral) (Y.deltaEncode 0.1 [1 .. integrateSamples]))
   pure ()
 
-sfIntegrateBench :: IO ()
-sfIntegrateBench = do
+signalIntegrateBench :: IO ()
+signalIntegrateBench = do
   !x <-
-    SF.fold
+    Signal.fold
       (\_ x -> x)
       0
-      (SF.withFixedTime 0.1 (\_ -> id) $ pure 1 >>> SF.integrate (*))
+      (Signal.withFixedTime 0.1 (\_ -> id) $ pure 1 >>> Signal.integrate (*))
       ()
       [1 .. integrateSamples]
   pure ()
@@ -65,9 +65,9 @@ yampaChainBench = do
   let !x = head $ Y.embed chainTest (0, [])
   pure ()
 
-sfChainBench :: IO ()
-sfChainBench = do
-  !x <- head <$> SF.sample chainTest () [0]
+signalChainBench :: IO ()
+signalChainBench = do
+  !x <- head <$> Signal.sample chainTest () [0]
   pure ()
 
 msfChainBench :: IO ()
@@ -78,11 +78,11 @@ msfChainBench = do
 main :: IO ()
 main = do
   putStrLn "Countdown benchmark"
-  benchMany 20 [("Yampa", yampaCountBench), ("dunai", msfCountBench), ("fast-signals", sfCountBench)]
+  benchMany 20 [("Yampa", yampaCountBench), ("dunai", msfCountBench), ("reactimate", signalCountBench)]
   putStrLn ""
   putStrLn "Integrate benchmark"
-  benchMany 1 [("Yampa", yampaIntegrateBench), ("fast-signals", sfIntegrateBench)]
+  benchMany 1 [("Yampa", yampaIntegrateBench), ("reactimate", signalIntegrateBench)]
   putStrLn ""
   putStrLn "Chaining (>>>) benchmark"
-  benchMany 20 [("Yampa", yampaChainBench), ("dunai", msfChainBench), ("fast-signals", sfChainBench)]
+  benchMany 20 [("Yampa", yampaChainBench), ("dunai", msfChainBench), ("reactimate", signalChainBench)]
 

@@ -1,4 +1,4 @@
-module Data.SF.Core where
+module Data.Signal.Core where
 
 import Control.Arrow
 import Control.Category
@@ -17,46 +17,46 @@ import Prelude hiding (id, (.))
 -- 1. The setup phase is run once at the beginning and produces a run function
 -- 2. The run phase is run as often as you want
 --
--- Notice that `SF` is an instance of `Functor`, `Applicative` and `Arrow`!
-newtype SF r a b = SF (Finalizer -> r -> IO (a -> IO b))
+-- Notice that `Signal` is an instance of `Functor`, `Applicative` and `Arrow`!
+newtype Signal r a b = Signal (Finalizer -> r -> IO (a -> IO b))
 
-instance Functor (SF r a) where
-  fmap f (SF m) = SF $ \fin r -> fmap (fmap f .) (m fin r)
+instance Functor (Signal r a) where
+  fmap f (Signal m) = Signal $ \fin r -> fmap (fmap f .) (m fin r)
   {-# INLINE fmap #-}
 
-instance Applicative (SF r a) where
-  pure a = SF $ \_ _ -> pure $ \_ -> pure a
-  (SF sf1) <*> (SF sf2) = SF $ \fin r -> do
-    f1 <- sf1 fin r
-    f2 <- sf2 fin r
+instance Applicative (Signal r a) where
+  pure a = Signal $ \_ _ -> pure $ \_ -> pure a
+  (Signal signal1) <*> (Signal signal2) = Signal $ \fin r -> do
+    f1 <- signal1 fin r
+    f2 <- signal2 fin r
     pure $ \a -> f1 a <*> f2 a
   {-# INLINE pure #-}
   {-# INLINE (<*>) #-}
 
-instance Category (SF r) where
-  id = SF $ \_ _ -> pure $ \a -> pure a
-  (SF sf1) . (SF sf2) = SF $ \fin r -> do
-    f1 <- sf1 fin r
-    f2 <- sf2 fin r
+instance Category (Signal r) where
+  id = Signal $ \_ _ -> pure $ \a -> pure a
+  (Signal signal1) . (Signal signal2) = Signal $ \fin r -> do
+    f1 <- signal1 fin r
+    f2 <- signal2 fin r
     pure $ f2 >=> f1
   {-# INLINE id #-}
   {-# INLINE (.) #-}
 
-instance Arrow (SF r) where
-  arr f = SF $ \_ _ -> pure $ pure . f
-  first (SF sf) = SF $ \fin r -> do
-    f <- sf fin r
+instance Arrow (Signal r) where
+  arr f = Signal $ \_ _ -> pure $ pure . f
+  first (Signal signal) = Signal $ \fin r -> do
+    f <- signal fin r
     pure $ \(a, b) -> (,b) <$> f a
-  second (SF sf) = SF $ \fin r -> do
-    f <- sf fin r
+  second (Signal signal) = Signal $ \fin r -> do
+    f <- signal fin r
     pure $ \(a, b) -> (a,) <$> f b
-  (SF sf1) *** (SF sf2) = SF $ \fin r -> do
-    f1 <- sf1 fin r
-    f2 <- sf2 fin r
+  (Signal signal1) *** (Signal signal2) = Signal $ \fin r -> do
+    f1 <- signal1 fin r
+    f2 <- signal2 fin r
     pure $ \(a, b) -> (,) <$> f1 a <*> f2 b
-  (SF sf1) &&& (SF sf2) = SF $ \fin r -> do
-    f1 <- sf1 fin r
-    f2 <- sf2 fin r
+  (Signal signal1) &&& (Signal signal2) = Signal $ \fin r -> do
+    f1 <- signal1 fin r
+    f2 <- signal2 fin r
     pure $ \a -> (,) <$> f1 a <*> f2 a
   {-# INLINE arr #-}
   {-# INLINE first #-}
@@ -64,28 +64,28 @@ instance Arrow (SF r) where
   {-# INLINE (***) #-}
   {-# INLINE (&&&) #-}
 
-instance ArrowChoice (SF r) where
-  left sf = SF $ \fin r -> do
-    f <- unSF sf fin r
+instance ArrowChoice (Signal r) where
+  left signal = Signal $ \fin r -> do
+    f <- unSignal signal fin r
     pure $ \ad -> case ad of
       Left a -> Left <$> f a
       Right d -> pure $ Right d
 
-  right sf = SF $ \fin r -> do
-    f <- unSF sf fin r
+  right signal = Signal $ \fin r -> do
+    f <- unSignal signal fin r
     pure $ \ad -> case ad of
       Right a -> Right <$> f a
       Left d -> pure $ Left d
 
-  sf1 +++ sf2 = SF $ \fin r -> do
-    f1 <- unSF sf1 fin r
-    f2 <- unSF sf2 fin r
+  signal1 +++ signal2 = Signal $ \fin r -> do
+    f1 <- unSignal signal1 fin r
+    f2 <- unSignal signal2 fin r
     pure $ \bb -> case bb of
       Left a -> Left <$> f1 a
       Right a -> Right <$> f2 a
-  sf1 ||| sf2 = SF $ \fin r -> do
-    f1 <- unSF sf1 fin r
-    f2 <- unSF sf2 fin r
+  signal1 ||| signal2 = Signal $ \fin r -> do
+    f1 <- unSignal signal1 fin r
+    f2 <- unSignal signal2 fin r
     pure $ \bb -> case bb of
       Left a -> f1 a
       Right a -> f2 a
@@ -95,9 +95,9 @@ instance ArrowChoice (SF r) where
   {-# INLINE (|||) #-}
 
 -- | Unwrap a signal function and feed in the environment @r@. The outer `IO` is the setup, which produces the run action.
-unSF :: SF r a b -> Finalizer -> r -> IO (a -> IO b)
-unSF (SF sf) = sf
-{-# INLINE unSF #-}
+unSignal :: Signal r a b -> Finalizer -> r -> IO (a -> IO b)
+unSignal (Signal signal) = signal
+{-# INLINE unSignal #-}
 
 -- | A `Finalizer` contains some clean-up code.
 -- Usually, they are run when the execution of the signal function stops
