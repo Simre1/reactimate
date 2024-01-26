@@ -8,8 +8,8 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad (forever, (>=>))
 import Data.IORef
-import Data.SF.Combinators (identity)
 import Data.SF.Core
+import Data.SF.Basic (identity)
 
 -- | Events are like @SF () a@, they produce values of @a@ and require no input.
 -- Events occure at some unknown time, so they cannot simply be sampled with run functions like 'reactimate'.

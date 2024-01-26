@@ -5,6 +5,8 @@ import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.SF.Core
 
 -- | Run a signal function repeatedly until it produces a `Just` value.
+--
+-- You may want to combine `reactimate` with `limitSampleRate`.
 reactimate :: SF r () (Maybe a) -> r -> IO a
 reactimate sf env =
   withFinalizer $ \fin -> do

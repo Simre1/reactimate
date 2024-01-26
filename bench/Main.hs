@@ -2,8 +2,8 @@ import Control.Arrow (Arrow (..))
 import Control.Category ((>>>))
 import Data.MonadicStreamFunction qualified as MSF
 import Data.MonadicStreamFunction.InternalCore qualified as MSF
-import Data.SF.Combinators qualified as SF
 import Data.SF.Run qualified as SF
+import Data.SF.Stateful qualified as SF
 import Data.SF.Time qualified as SF
 import FRP.Yampa qualified as Y
 import Test.BenchPress (benchMany)
@@ -46,17 +46,13 @@ yampaIntegrateBench = do
   !x <- pure $ last (Y.embed (pure (1 :: Double) >>> Y.integral) (Y.deltaEncode 0.1 [1 .. integrateSamples]))
   pure ()
 
-newtype Env = Env
-  { time :: SF.Time
-  }
-
 sfIntegrateBench :: IO ()
 sfIntegrateBench = do
   !x <-
     SF.fold
       (\_ x -> x)
       0
-      (SF.withFixedTime 0.1 (\_ t -> Env t) $ pure 1 >>> SF.integrate (*))
+      (SF.withFixedTime 0.1 (\_ -> id) $ pure 1 >>> SF.integrate (*))
       ()
       [1 .. integrateSamples]
   pure ()

@@ -23,12 +23,17 @@ common common
 library
     import: common
     exposed-modules:  
+        Data.SF,
         Data.SF.Core,
         Data.SF.Run,
         Data.SF.Time,
-        Data.SF.Combinators,
         Data.SF.Sampling,
-        Data.SF.Event
+        Data.SF.Stateful,
+        Data.SF.Switching,
+        Data.SF.Environment,
+        Data.SF.Basic,
+        Data.SF.Event,
+        Data.SF.Delay
     hs-source-dirs:   src
     ghc-options: -O2
     build-depends: 
