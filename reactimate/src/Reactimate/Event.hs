@@ -1,6 +1,6 @@
 {-# LANGUAGE RecursiveDo #-}
 
-module Data.Signal.Event where
+module Reactimate.Event where
 
 import Control.Applicative (liftA2)
 import Control.Arrow ((>>>))
@@ -8,8 +8,8 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Monad (forever, (>=>))
 import Data.IORef
-import Data.Signal.Core
-import Data.Signal.Basic (identity)
+import Reactimate.Basic (identity)
+import Reactimate.Signal
 
 -- | Events are like @Signal () a@, they produce values of @a@ and require no input.
 -- Events occure at some unknown time, so they cannot simply be sampled with run functions like 'reactimate'.
@@ -111,9 +111,9 @@ sampleEvent accumulate initial (Event signal hook) = Signal $ \fin r -> mdo
   ref <- newIORef initial
   f <- unSignal signal fin r
   hook fin r $ \x -> do
-        a <- f x
-        modifyIORef' ref (`accumulate` a)
-  pure $ \_ -> atomicModifyIORef' ref (initial, )
+    a <- f x
+    modifyIORef' ref (`accumulate` a)
+  pure $ \_ -> atomicModifyIORef' ref (initial,)
 
 -- | Grab all unseen events as a list
 sampleEventAsList :: Event r a -> Signal r () [a]

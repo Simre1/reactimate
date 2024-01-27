@@ -1,6 +1,6 @@
 -- | @reactimate@ implements signal which are well suited for simulations, game loops and complicated stream processing.
 -- It's also possible to react to events as they are happening and integrate them into signal functions.
-module Data.Signal
+module Reactimate
   ( Signal,
 
     -- * Basic signals
@@ -60,13 +60,13 @@ module Data.Signal
   )
 where
 
-import Data.Signal.Basic
-import Data.Signal.Core
-import Data.Signal.Delay
-import Data.Signal.Environment
-import Data.Signal.Event
-import Data.Signal.Run
-import Data.Signal.Sampling
-import Data.Signal.Stateful
-import Data.Signal.Switching
-import Data.Signal.Time
+import Reactimate.Basic
+import Reactimate.Delay
+import Reactimate.Environment
+import Reactimate.Event
+import Reactimate.Run
+import Reactimate.Sampling
+import Reactimate.Signal
+import Reactimate.Stateful
+import Reactimate.Switching
+import Reactimate.Time

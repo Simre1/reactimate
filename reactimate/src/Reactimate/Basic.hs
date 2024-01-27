@@ -1,7 +1,7 @@
-module Data.Signal.Basic where
+module Reactimate.Basic where
 
 import Control.Arrow (Arrow (..))
-import Data.Signal.Core
+import Reactimate.Signal
 
 -- | Duplicating the input may be useful for various other arrow combinators.
 dup :: Signal r a (a, a)

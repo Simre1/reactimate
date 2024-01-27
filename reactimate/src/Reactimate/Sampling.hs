@@ -1,16 +1,16 @@
-module Data.Signal.Sampling where
+module Reactimate.Sampling where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
 import Control.Monad (forever, when)
 import Data.IORef
-import Data.Signal.Core
-import Data.Signal.Environment (mapEnv)
-import Data.Signal.Time
 import Data.Sequence (Seq)
 import Data.Sequence qualified as S
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
+import Reactimate.Environment (mapEnv)
+import Reactimate.Signal
+import Reactimate.Time
 
 -- | Resamples a Signal with the first argument as the specified @frameTime@ within the same thread. The resampled Signal will have a fixed time delta of @frameTime@.
 -- The inputs and outputs are collected in a sequence.

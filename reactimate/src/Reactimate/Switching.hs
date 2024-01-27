@@ -1,11 +1,11 @@
 {-# LANGUAGE RecursiveDo #-}
 
-module Data.Signal.Switching where
+module Reactimate.Switching where
 
 import Control.Monad (when)
 import Data.IORef
-import Data.Signal.Core
 import Data.Vector qualified as V
+import Reactimate.Signal
 
 -- | 'caseOf' is a powerful combinator to implement switching behavior. It is similar to case expressions, but for signal functions.
 --

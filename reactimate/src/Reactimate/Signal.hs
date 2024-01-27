@@ -1,4 +1,4 @@
-module Data.Signal.Core where
+module Reactimate.Signal where
 
 import Control.Arrow
 import Control.Category

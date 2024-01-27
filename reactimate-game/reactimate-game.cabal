@@ -1,0 +1,57 @@
+cabal-version:      3.0
+name:               reactimate-game
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Simre1
+maintainer:         simre4775@gmail.com
+-- copyright:
+category:           Game
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common common
+    ghc-options: -Wall
+    default-language: GHC2021
+    default-extensions:
+        OverloadedRecordDot
+    build-depends:    
+        base ^>=4.17.2.1
+
+library
+    import:           common
+    exposed-modules:  
+        Reactimate.Game,
+        Reactimate.Game.Setup,
+        Reactimate.Game.Graphics
+    hs-source-dirs:   src
+    build-depends:
+        sdl2,
+        containers,
+        vector,
+        pqueue,
+        colour,
+        linear,
+        reactimate,
+        text
+
+executable basic-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/basic-example
+    build-depends:
+        reactimate,
+        reactimate-game,
+        text
+
+
+test-suite reactimate-game-test
+    import:           common
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test
+    main-is:          Main.hs
+    build-depends:
+        reactimate-game

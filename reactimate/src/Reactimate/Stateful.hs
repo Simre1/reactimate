@@ -1,9 +1,9 @@
-module Data.Signal.Stateful where
+module Reactimate.Stateful where
 
 import Control.Arrow ((>>>))
 import Data.IORef
-import Data.Signal.Basic
-import Data.Signal.Core
+import Reactimate.Basic
+import Reactimate.Signal
 
 -- | Feeds the output state back as input. The state @s@ is strict.
 feedback :: s -> Signal r (a, s) (b, s) -> Signal r a b

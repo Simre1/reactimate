@@ -1,13 +1,13 @@
 import Control.Arrow (Arrow (..))
 import Control.Category ((>>>))
+import Data.Foldable (Foldable (..))
 import Data.MonadicStreamFunction qualified as MSF
 import Data.MonadicStreamFunction.InternalCore qualified as MSF
-import Data.Signal.Run qualified as Signal
-import Data.Signal.Stateful qualified as Signal
-import Data.Signal.Time qualified as Signal
 import FRP.Yampa qualified as Y
+import Reactimate.Run qualified as Signal
+import Reactimate.Stateful qualified as Signal
+import Reactimate.Time qualified as Signal
 import Test.BenchPress (benchMany)
-import Data.Foldable (Foldable(..))
 
 count :: Int
 count = 100000
@@ -23,7 +23,7 @@ yampaCountBench = do
 
 signalCountBench :: IO ()
 signalCountBench = do
-  !x <- Signal.reactimate (Signal.feedback count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)) ()
+  !x <- Signal.reactimate () $ Signal.feedback count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)
   pure ()
 
 msfCountBench :: IO ()
@@ -50,15 +50,15 @@ signalIntegrateBench :: IO ()
 signalIntegrateBench = do
   !x <-
     Signal.fold
+      ()
       (\_ x -> x)
       0
       (Signal.withFixedTime 0.1 (\_ -> id) $ pure 1 >>> Signal.integrate (*))
-      ()
       [1 .. integrateSamples]
   pure ()
 
-chainTest :: Arrow a => a Double Double
-chainTest = foldl' (\a _ -> a >>> a) (arr (+1)) [0..16]
+chainTest :: (Arrow a) => a Double Double
+chainTest = foldl' (\a _ -> a >>> a) (arr (+ 1)) [0 .. 16]
 
 yampaChainBench :: IO ()
 yampaChainBench = do
@@ -67,7 +67,7 @@ yampaChainBench = do
 
 signalChainBench :: IO ()
 signalChainBench = do
-  !x <- head <$> Signal.sample chainTest () [0]
+  !x <- head <$> Signal.sample () chainTest [0]
   pure ()
 
 msfChainBench :: IO ()
@@ -85,4 +85,3 @@ main = do
   putStrLn ""
   putStrLn "Chaining (>>>) benchmark"
   benchMany 20 [("Yampa", yampaChainBench), ("dunai", msfChainBench), ("reactimate", signalChainBench)]
-

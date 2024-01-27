@@ -1,15 +1,15 @@
-module Data.Signal.Time (Time, withTime, withFixedTime, TimeEnv (..), deltaTime, currentTime, integrate) where
+module Reactimate.Time (Time, withTime, withFixedTime, TimeEnv (..), deltaTime, currentTime, integrate) where
 
 import Control.Arrow
 import Control.Category (Category (id))
 import Data.IORef (IORef, newIORef, readIORef)
-import Data.Signal.Basic (arrIO)
-import Data.Signal.Core
-import Data.Signal.Environment (useEnv)
-import Data.Signal.Stateful (feedback)
 import GHC.Clock (getMonotonicTime)
 import GHC.IORef (writeIORef)
 import GHC.Records
+import Reactimate.Basic (arrIO)
+import Reactimate.Environment (useEnv)
+import Reactimate.Signal
+import Reactimate.Stateful (feedback)
 import Prelude hiding (id)
 
 data Time = Time

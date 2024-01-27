@@ -23,17 +23,17 @@ common common
 library
     import: common
     exposed-modules:  
-        Data.Signal,
-        Data.Signal.Core,
-        Data.Signal.Run,
-        Data.Signal.Time,
-        Data.Signal.Sampling,
-        Data.Signal.Stateful,
-        Data.Signal.Switching,
-        Data.Signal.Environment,
-        Data.Signal.Basic,
-        Data.Signal.Event,
-        Data.Signal.Delay
+        Reactimate,
+        Reactimate.Signal,
+        Reactimate.Run,
+        Reactimate.Time,
+        Reactimate.Sampling,
+        Reactimate.Stateful,
+        Reactimate.Switching,
+        Reactimate.Environment,
+        Reactimate.Basic,
+        Reactimate.Event,
+        Reactimate.Delay
     hs-source-dirs:   src
     ghc-options: -O2
     build-depends: 
