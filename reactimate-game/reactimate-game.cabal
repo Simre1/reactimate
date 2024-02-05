@@ -12,31 +12,39 @@ category:           Game
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
 -- extra-source-files:
+data-files: shaders
 
 common common
     ghc-options: -Wall
     default-language: GHC2021
     default-extensions:
         OverloadedRecordDot
+        DuplicateRecordFields
     build-depends:    
-        base ^>=4.17.2.1
+        base ^>=4.17.2.1,
+        vector,
+        linear
 
 library
     import:           common
+    other-modules:      Paths_reactimate_game
+    autogen-modules:    Paths_reactimate_game
     exposed-modules:  
         Reactimate.Game,
         Reactimate.Game.Setup,
-        Reactimate.Game.Graphics
+        Reactimate.Game.Graphics,
+        Reactimate.Game.Projection2D,
+        Reactimate.Game.Shapes
     hs-source-dirs:   src
     build-depends:
         sdl2,
+        sdl2-gfx,
         containers,
-        vector,
         pqueue,
         colour,
-        linear,
         reactimate,
-        text
+        text,
+        filepath
 
 executable basic-example
     import: common
@@ -46,6 +54,15 @@ executable basic-example
         reactimate,
         reactimate-game,
         text
+
+executable bench
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: bench
+    build-depends:
+        reactimate,
+        reactimate-game,
+        gauge
 
 
 test-suite reactimate-game-test

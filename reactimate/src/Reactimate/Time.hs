@@ -1,4 +1,4 @@
-module Reactimate.Time (Time, withTime, withFixedTime, TimeEnv (..), deltaTime, currentTime, integrate) where
+module Reactimate.Time (Time, withTime, withFixedTime, deltaTime, currentTime, integrate) where
 
 import Control.Arrow
 import Control.Category (Category (id))
@@ -12,13 +12,12 @@ import Reactimate.Signal
 import Reactimate.Stateful (feedback)
 import Prelude hiding (id)
 
+-- | Tracks `currentTime` and `deltaTime`. 
 data Time = Time
   { dTime :: {-# UNPACK #-} !(IORef Double),
     cTime :: {-# UNPACK #-} !(IORef Double)
   }
   deriving (Eq)
-
-newtype TimeEnv = TimeEnv {time :: Time} deriving (Eq)
 
 -- | Add a 'Time' to your environment based on real data.
 -- 'Time' contains the total runtime as well as a delta time which is the time between executions of signal functions.
