@@ -3,7 +3,7 @@
 
 {-# HLINT ignore "Use newtype instead of data" #-}
 
-module Reactimate.Game.Graphics (render, SDL.Window, Picture, Camera (..), makePicture, PictureAtoms (..), staticPicture, packColour, packAlphaColour) where
+module Reactimate.Game.Graphics (render, SDL.WindowConfig (..), SDL.defaultWindow, Picture, Camera (..), makePicture, PictureAtoms (..), staticPicture, packColour, packAlphaColour) where
 
 import Control.Monad
 import Data.Colour
@@ -12,38 +12,34 @@ import Data.IntMap.Strict qualified as IM
 import Data.Sequence qualified as S
 import Data.Vector.Storable qualified as VS
 import Data.Word (Word8)
-import Foreign.Ptr
-import Foreign.Storable (Storable (..))
 import GHC.Generics (Generic)
 import Linear.V2
 import Linear.V4
-import Paths_reactimate_game (getDataDir)
-import Reactimate (Signal, arrIO)
-import Reactimate.Delay (once)
-import Reactimate.Environment (withResourceSetup)
+import Reactimate (Signal, allocateResource, arrIO, once)
+import Reactimate.Game.Environment (GameEnv (..))
 import Reactimate.Game.Shapes
 import Reactimate.Signal (addFinalizer)
 import SDL qualified
 import SDL.Primitive qualified as SDL
-import System.FilePath ((</>))
 
--- | Renders the `Picture` to the given `Window` with the `Camera` each frame.
-render :: (r -> SDL.Window) -> Signal r (Camera, Picture) ()
-render getWindow =
-  withResourceSetup
-    ( \fin r -> do
-        dataDir <- getDataDir
-        let window = getWindow r
-            primitivesVertexShader = dataDir </> "shaders" </> "primitives.vert"
-            primitivesFragmentShader = dataDir </> "shaders" </> "primitives.frag"
+-- | Creates a new window and renders the given `Picture` with the `Camera` each frame.
+render :: GameEnv -> Signal (Camera, Picture) ()
+render gameEnv =
+  allocateResource
+    ( \fin -> do
+        -- dataDir <- getDataDir
+        -- let window = getWindow r
+        --     primitivesVertexShader = dataDir </> "shaders" </> "primitives.vert"
+        --     primitivesFragmentShader = dataDir </> "shaders" </> "primitives.frag"
         -- shader <- R.loadShader (Just primitivesVertexShader) (Just primitivesFragmentShader) windowResources
         -- addFinalizer fin $ R.unloadShader shader windowResources
-        renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
+        renderer <- SDL.createRenderer gameEnv.window (-1) SDL.defaultRenderer
         addFinalizer fin $ SDL.destroyRenderer renderer
-        pure (r, (renderer, window))
+        pure renderer
     )
-    $ arrIO
-    $ \((camera, picture), (renderer, window)) -> renderScreen window renderer camera picture
+    $ \renderer ->
+      arrIO $
+        uncurry (renderScreen gameEnv.window renderer)
 {-# INLINE render #-}
 
 -- | A `Picture` is a collection of `PictureAtom`s. `Picture` implements `Semigroup`,
@@ -97,13 +93,13 @@ makePicture zIndex pictureAtoms =
 
 -- | Creates the `Picture` once and then reuses it in all subsequenct renders. If you have some static content,
 -- use this function to save some computation time.
-staticPicture :: Signal r a Picture -> Signal r a Picture
+staticPicture :: Signal a Picture -> Signal a Picture
 staticPicture = once
 
 -- | Moves points from global coordinates to screen coordinates.
 adjustPosition :: Camera -> V2 Int -> V2 Int -> V2 Int
-adjustPosition (Camera (V2 cx cy) _) (V2 _ wY) (V2 x y) =
-  V2 (x - cx) (wY - y + cy)
+adjustPosition (Camera (V2 cx cy) (V2 vx vy)) (V2 wx wy) (V2 x y) =
+  V2 ((x - cx) * wx `quot` vx) (wy - (y + cy) * wy `quot` vy)
 
 packAlphaColour :: AlphaColour Float -> V4 Word8
 packAlphaColour colour =

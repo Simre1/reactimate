@@ -30,7 +30,7 @@ library
         Reactimate.Sampling,
         Reactimate.Stateful,
         Reactimate.Switching,
-        Reactimate.Environment,
+        Reactimate.Setup,
         Reactimate.Basic,
         Reactimate.Event,
         Reactimate.Delay

@@ -7,7 +7,7 @@ import GHC.Clock (getMonotonicTime)
 import GHC.IORef (writeIORef)
 import GHC.Records
 import Reactimate.Basic (arrIO)
-import Reactimate.Environment
+import Reactimate.Setup
 import Reactimate.Signal
 import Reactimate.Stateful (feedback)
 import Prelude hiding (id)

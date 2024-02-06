@@ -35,7 +35,9 @@ library
         Reactimate.Game.Graphics,
         Reactimate.Game.Projection2D,
         Reactimate.Game.Shapes,
-        Reactimate.Game.Input
+        Reactimate.Game.Input,
+        Reactimate.Game.Environment,
+        
     hs-source-dirs:   src
     build-depends:
         sdl2,
@@ -51,6 +53,15 @@ executable basic-example
     import: common
     main-is: Main.hs
     hs-source-dirs: examples/basic-example
+    build-depends:
+        reactimate,
+        reactimate-game,
+        text
+
+executable mouse-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/mouse-example
     build-depends:
         reactimate,
         reactimate-game,

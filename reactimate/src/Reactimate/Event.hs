@@ -21,11 +21,13 @@ data Event a where
     } ->
     Event a
 
--- | Behaviors change their value over time. They always have a value, so they can be sampled whenever you want.
-data Behavior a = Behavior
+-- | Dynamics change their value over time. They always have a value, so they can be sampled whenever you want.
+data Dynamic a = Dynamic
   { event :: !(Event a),
     initialValue :: !a
   }
+
+newtype Behavior a = Behavior (Signal () a) deriving (Functor, Applicative)
 
 instance Functor Event where
   fmap f (Event signal hook) = Event (fmap f signal) hook
@@ -41,15 +43,15 @@ instance Semigroup (Event a) where
 instance Monoid (Event a) where
   mempty = Event identity $ \_ _ -> pure ()
 
-instance Functor Behavior where
-  fmap f (Behavior event a) = Behavior (fmap f event) (f a)
+instance Functor Dynamic where
+  fmap f (Dynamic event a) = Dynamic (fmap f event) (f a)
 
-instance Applicative Behavior where
-  pure = Behavior mempty
+instance Applicative Dynamic where
+  pure = Dynamic mempty
   liftA2
     f
-    (Behavior (Event signalA hookA) initialValueA)
-    (Behavior (Event signalB hookB) initialValueB) = Behavior event (f initialValueA initialValueB)
+    (Dynamic (Event signalA hookA) initialValueA)
+    (Dynamic (Event signalB hookB) initialValueB) = Dynamic event (f initialValueA initialValueB)
       where
         event = Event identity $ \fin trigger -> do
           refA <- newIORef initialValueA
@@ -120,13 +122,24 @@ sampleEventAsList :: Event a -> Signal () [a]
 sampleEventAsList = fmap ($ []) . sampleEvent (\f a -> f . (a :)) id
 
 -- | Map a signal function over an event.
-eventMap :: Signal a b -> Event a -> Event b
-eventMap signal2 (Event signal1 hook) = Event (signal1 >>> signal2) hook
+mapEvent :: Signal a b -> Event a -> Event b
+mapEvent signal2 (Event signal1 hook) = Event (signal1 >>> signal2) hook
+
+-- | Sample a `Dynamic`.
+sampleDynamic :: Dynamic a -> Signal () a
+sampleDynamic (Dynamic event initialValue) = Signal $ \r -> unSignal (sampleEvent (\_ x -> x) initialValue event) r
 
 -- | Sample a `Behavior`.
 sampleBehavior :: Behavior a -> Signal () a
-sampleBehavior (Behavior event initialValue) = Signal $ \r -> unSignal (sampleEvent (\_ x -> x) initialValue event) r
+sampleBehavior (Behavior signal) = signal
 
--- | Hold the value of an `Event` to a `Behavior` with initial value @a@.
-holdEvent :: a -> Event a -> Behavior a
-holdEvent a event = Behavior event a
+-- | Map a signal function over a `Behavior`.
+mapBehavior :: Signal a b -> Behavior a -> Behavior b
+mapBehavior signal2 (Behavior signal1) = Behavior $ signal1 >>> signal2
+
+-- | Hold the value of an `Event` to a `Dynamic` with initial value @a@.
+holdEvent :: a -> Event a -> Dynamic a
+holdEvent a event = Dynamic event a
+
+makeBehavior :: Signal () a -> Behavior a
+makeBehavior = Behavior

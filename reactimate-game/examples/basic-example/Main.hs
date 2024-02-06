@@ -6,21 +6,16 @@ import Control.Arrow
 import Data.Vector.Storable qualified as VS
 import Reactimate
 import Reactimate.Game
-import Reactimate.Game.Shapes
 import Reactimate.Stateful (sumUp)
 
 main :: IO ()
 main =
-  reactimate () $
-    setupGame (GameConfig "Basic Example" (V2 800 600)) (\_ -> GameEnv) $
-      limitSampleRate (1 / 60) $
-        game >>> render (\(GameEnv window) -> window) >>> constant Nothing
+  reactimate $
+    setupGame (GameConfig "Basic Example" defaultWindow) $ \gameEnv ->
+      limitSampleRate 60 $
+        game >>> render gameEnv >>> constant Nothing
 
-data GameEnv = GameEnv
-  { window :: Window
-  }
-
-game :: Signal GameEnv () (Camera, Picture)
+game :: Signal () (Camera, Picture)
 game = constant 1 >>> sumUp >>> arr (\x -> (camera, shapes x))
 
 shapes :: Int -> Picture

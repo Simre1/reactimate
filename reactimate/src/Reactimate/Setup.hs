@@ -1,4 +1,4 @@
-module Reactimate.Environment where
+module Reactimate.Setup where
 
 import Reactimate.Signal
 

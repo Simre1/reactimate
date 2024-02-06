@@ -6,10 +6,23 @@ module Reactimate
     -- * Basic signals
     identity,
     constant,
+    arr,
     arr2,
     arrIO,
     dup,
 
+    -- * Combinators
+    (>>>),
+    (<<<),
+    (&&&),
+    (***),
+    first,
+    second,
+    (|||),
+    (+++),
+    left,
+    right,
+    
     -- * Stateful signals
     feedback,
     lazyFeedback,
@@ -17,6 +30,7 @@ module Reactimate
 
     -- * Delay signals
     delaySample,
+    once,
 
     -- * Switch signals
     caseOf,
@@ -24,6 +38,8 @@ module Reactimate
 
     -- * Signal Setup
     withSetup,
+    allocateResource,
+    addFinalizer,
 
     -- * Time in signals
     Time,
@@ -44,9 +60,12 @@ module Reactimate
     -- * Events
     Event,
     Behavior,
+    Dynamic,
+    makeBehavior,
     pulse,
     callback,
-    eventMap,
+    mapEvent,
+    mapBehavior,
     holdEvent,
 
     -- ** Sampling events
@@ -54,12 +73,14 @@ module Reactimate
     sampleEvent,
     sampleEventAsList,
     sampleBehavior,
+    sampleDynamic
   )
 where
 
+import Control.Arrow
 import Reactimate.Basic
 import Reactimate.Delay
-import Reactimate.Environment
+import Reactimate.Setup
 import Reactimate.Event
 import Reactimate.Run
 import Reactimate.Sampling
