@@ -10,7 +10,7 @@ main = do
   case args of
     [imagePath] ->
       reactimate $
-        setupGame (GameConfig (pack "Basic Example") defaultWindow) $ \gameEnv ->
+        setupGame (GameConfig (pack "Image Example") defaultWindow) $ \gameEnv ->
           limitSampleRate 60 $
             game gameEnv (pack imagePath) >>> render gameEnv >>> constant Nothing
     _ -> putStrLn "Run this example with the image path as the argument"
