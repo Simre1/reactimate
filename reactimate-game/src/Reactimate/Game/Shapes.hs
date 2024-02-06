@@ -130,7 +130,7 @@ instance (Storable shape) => Storable (ColouredShape shape) where
   alignment _ = 0
   peek ptr = do
     colour <- peek $ castPtr ptr
-    shape <- peek $ (ptr `plusPtr` byteSize @(V4 Word8))
+    shape <- peek (ptr `plusPtr` byteSize @(V4 Word8))
     pure $ ColouredShape colour shape
   poke ptr (ColouredShape colour shape) = do
     poke (castPtr ptr) colour

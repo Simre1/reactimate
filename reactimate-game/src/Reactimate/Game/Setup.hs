@@ -14,8 +14,13 @@ data GameConfig = GameConfig
   }
   deriving (Eq, Show, Generic)
 
+data SDLEnv r = SDLEnv {
+  env :: !r,
+  window :: !SDL.Window
+}
+
 -- | Initializes the game context and provides you with a `Window` which can be used for rendering. 
-setupGame :: GameConfig -> (r1 -> SDL.Window -> r2) -> Signal r2 a b -> Signal r1 a b
+setupGame :: GameConfig -> (Event SDL.Event -> Signal () -> Signal a b
 setupGame config updateEnv = allocateResource $ \fin r1 -> do
   SDL.initializeAll
   window <- SDL.createWindow

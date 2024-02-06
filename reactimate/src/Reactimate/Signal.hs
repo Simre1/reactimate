@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Reactimate.Signal where
 
 import Control.Arrow
@@ -18,45 +19,45 @@ import Prelude hiding (id, (.))
 -- 2. The run phase is run as often as you want
 --
 -- Notice that `Signal` is an instance of `Functor`, `Applicative` and `Arrow`!
-newtype Signal r a b = Signal (Finalizer -> r -> IO (a -> IO b))
+newtype Signal a b = Signal (Finalizer -> IO (a -> IO b))
 
-instance Functor (Signal r a) where
-  fmap f (Signal m) = Signal $ \fin r -> fmap (fmap f .) (m fin r)
+instance Functor (Signal a) where
+  fmap f (Signal m) = Signal $ \fin -> fmap (fmap f .) (m fin)
   {-# INLINE fmap #-}
 
-instance Applicative (Signal r a) where
-  pure a = Signal $ \_ _ -> pure $ \_ -> pure a
-  (Signal signal1) <*> (Signal signal2) = Signal $ \fin r -> do
-    f1 <- signal1 fin r
-    f2 <- signal2 fin r
+instance Applicative (Signal a) where
+  pure a = Signal $ \_ -> pure $ \_ -> pure a
+  (Signal signal1) <*> (Signal signal2) = Signal $ \fin -> do
+    f1 <- signal1 fin 
+    f2 <- signal2 fin 
     pure $ \a -> f1 a <*> f2 a
   {-# INLINE pure #-}
   {-# INLINE (<*>) #-}
 
-instance Category (Signal r) where
-  id = Signal $ \_ _ -> pure $ \a -> pure a
-  (Signal signal1) . (Signal signal2) = Signal $ \fin r -> do
-    f1 <- signal1 fin r
-    f2 <- signal2 fin r
+instance Category Signal where
+  id = Signal $ \_ -> pure $ \a -> pure a
+  (Signal signal1) . (Signal signal2) = Signal $ \fin -> do
+    f1 <- signal1 fin 
+    f2 <- signal2 fin 
     pure $ f2 >=> f1
   {-# INLINE id #-}
   {-# INLINE (.) #-}
 
-instance Arrow (Signal r) where
-  arr f = Signal $ \_ _ -> pure $ pure . f
-  first (Signal signal) = Signal $ \fin r -> do
-    f <- signal fin r
+instance Arrow Signal where
+  arr f = Signal $ \_ -> pure $ pure . f
+  first (Signal signal) = Signal $ \fin -> do
+    f <- signal fin 
     pure $ \(a, b) -> (,b) <$> f a
-  second (Signal signal) = Signal $ \fin r -> do
-    f <- signal fin r
+  second (Signal signal) = Signal $ \fin -> do
+    f <- signal fin 
     pure $ \(a, b) -> (a,) <$> f b
-  (Signal signal1) *** (Signal signal2) = Signal $ \fin r -> do
-    f1 <- signal1 fin r
-    f2 <- signal2 fin r
+  (Signal signal1) *** (Signal signal2) = Signal $ \fin -> do
+    f1 <- signal1 fin 
+    f2 <- signal2 fin 
     pure $ \(a, b) -> (,) <$> f1 a <*> f2 b
-  (Signal signal1) &&& (Signal signal2) = Signal $ \fin r -> do
-    f1 <- signal1 fin r
-    f2 <- signal2 fin r
+  (Signal signal1) &&& (Signal signal2) = Signal $ \fin -> do
+    f1 <- signal1 fin 
+    f2 <- signal2 fin 
     pure $ \a -> (,) <$> f1 a <*> f2 a
   {-# INLINE arr #-}
   {-# INLINE first #-}
@@ -64,29 +65,29 @@ instance Arrow (Signal r) where
   {-# INLINE (***) #-}
   {-# INLINE (&&&) #-}
 
-instance ArrowChoice (Signal r) where
-  left signal = Signal $ \fin r -> do
-    f <- unSignal signal fin r
-    pure $ \ad -> case ad of
+instance ArrowChoice Signal where
+  left signal = Signal $ \fin  -> do
+    f <- unSignal signal fin 
+    pure $ \case
       Left a -> Left <$> f a
       Right d -> pure $ Right d
 
-  right signal = Signal $ \fin r -> do
-    f <- unSignal signal fin r
-    pure $ \ad -> case ad of
+  right signal = Signal $ \fin -> do
+    f <- unSignal signal fin 
+    pure $ \case
       Right a -> Right <$> f a
       Left d -> pure $ Left d
 
-  signal1 +++ signal2 = Signal $ \fin r -> do
-    f1 <- unSignal signal1 fin r
-    f2 <- unSignal signal2 fin r
-    pure $ \bb -> case bb of
+  signal1 +++ signal2 = Signal $ \fin -> do
+    f1 <- unSignal signal1 fin 
+    f2 <- unSignal signal2 fin 
+    pure $ \case
       Left a -> Left <$> f1 a
       Right a -> Right <$> f2 a
-  signal1 ||| signal2 = Signal $ \fin r -> do
-    f1 <- unSignal signal1 fin r
-    f2 <- unSignal signal2 fin r
-    pure $ \bb -> case bb of
+  signal1 ||| signal2 = Signal $ \fin  -> do
+    f1 <- unSignal signal1 fin 
+    f2 <- unSignal signal2 fin 
+    pure $ \case
       Left a -> f1 a
       Right a -> f2 a
   {-# INLINE left #-}
@@ -95,7 +96,7 @@ instance ArrowChoice (Signal r) where
   {-# INLINE (|||) #-}
 
 -- | Unwrap a signal function and feed in the environment @r@. The outer `IO` is the setup, which produces the run action.
-unSignal :: Signal r a b -> Finalizer -> r -> IO (a -> IO b)
+unSignal :: Signal a b -> Finalizer -> IO (a -> IO b)
 unSignal (Signal signal) = signal
 {-# INLINE unSignal #-}
 

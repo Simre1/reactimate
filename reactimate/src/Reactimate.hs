@@ -22,10 +22,7 @@ module Reactimate
     caseOf,
     switch,
 
-    -- * Signal Environemnt
-    useEnv,
-    modifyEnv,
-    mapEnv,
+    -- * Signal Setup
     withSetup,
 
     -- * Time in signals

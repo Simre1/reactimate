@@ -34,7 +34,8 @@ library
         Reactimate.Game.Setup,
         Reactimate.Game.Graphics,
         Reactimate.Game.Projection2D,
-        Reactimate.Game.Shapes
+        Reactimate.Game.Shapes,
+        Reactimate.Game.Input
     hs-source-dirs:   src
     build-depends:
         sdl2,

@@ -14,18 +14,18 @@ import Reactimate.Signal
 -- they keep their state.
 --
 -- Beware that this function should not be used when @c@ has many (~dozens) cases, since the setup phase will be run for each case.
-caseOf :: forall c r a b. (Bounded c, Enum c) => Signal r a c -> (c -> Signal r a b) -> Signal r a b
-caseOf decider makeSignal = Signal $ \fin r -> do
+caseOf :: forall c a b. (Bounded c, Enum c) => Signal a c -> (c -> Signal a b) -> Signal a b
+caseOf decider makeSignal = Signal $ \fin -> do
   when (fromEnum (maxBound :: c) - fromEnum (minBound :: c) > 100) $
     fail "You probably do not want to use `caseSignal` with so many cases. Use `manyCaseSignal` if you really want to."
-  unSignal (manyCaseSignal decider makeSignal) fin r
+  unSignal (manyCaseSignal decider makeSignal) fin
 {-# INLINE caseOf #-}
 
 -- | Same as `caseOf` but will not error when you have a @c@ with many cases.
-manyCaseSignal :: (Bounded c, Enum c) => Signal r a c -> (c -> Signal r a b) -> Signal r a b
-manyCaseSignal (Signal makeDecider) makeSignal = Signal $ \fin r -> do
-  decide <- makeDecider fin r
-  signals <- V.fromList <$> traverse (\c -> unSignal (makeSignal c) fin r) [minBound .. maxBound]
+manyCaseSignal :: (Bounded c, Enum c) => Signal a c -> (c -> Signal a b) -> Signal a b
+manyCaseSignal (Signal makeDecider) makeSignal = Signal $ \fin -> do
+  decide <- makeDecider fin
+  signals <- V.fromList <$> traverse (\c -> unSignal (makeSignal c) fin) [minBound .. maxBound]
   pure $ \a -> do
     c <- decide a
     let step = signals V.! fromEnum c
@@ -34,17 +34,17 @@ manyCaseSignal (Signal makeDecider) makeSignal = Signal $ \fin r -> do
 
 -- | Switch out a signal function with another when you produce a @Just c@ value.
 -- The next signal function will become active in the next iteration.
-switch :: Signal r a (b, Maybe c) -> (c -> Signal r a b) -> Signal r a b
-switch signal kont = Signal $ \fin r -> mdo
+switch :: Signal a (b, Maybe c) -> (c -> Signal a b) -> Signal a b
+switch signal kont = Signal $ \fin -> mdo
   newFin <- newFinalizer
-  f <- unSignal signal newFin r
+  f <- unSignal signal newFin
 
   stepRef <- newIORef $ \a -> do
     (b, maybeC) <- f a
     case maybeC of
       Nothing -> pure b
       Just c -> do
-        newStep <- unSignal (kont c) fin r
+        newStep <- unSignal (kont c) fin
         writeIORef stepRef newStep
         runFinalizer newFin
         pure b

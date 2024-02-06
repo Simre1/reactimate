@@ -4,8 +4,8 @@ import Data.IORef
 import Reactimate.Signal
 
 -- | Delay the execution by one sample
-delaySample :: a -> Signal r a a
-delaySample initial = Signal $ \_ _ -> do
+delaySample :: a -> Signal a a
+delaySample initial = Signal $ \_ -> do
   delayRef <- newIORef initial
   pure $ \a' -> do
     a <- readIORef delayRef
@@ -14,10 +14,10 @@ delaySample initial = Signal $ \_ _ -> do
 {-# INLINE delaySample #-}
 
 -- | Evaluate the signal once and then return its result
-once :: Signal r a b -> Signal r a b
-once (Signal signal) = Signal $ \fin r -> do
+once :: Signal a b -> Signal a b
+once (Signal signal) = Signal $ \fin -> do
   ref <- newIORef Nothing
-  f <- signal fin r
+  f <- signal fin 
   pure $ \a -> do
     maybeB <- readIORef ref
     case maybeB of

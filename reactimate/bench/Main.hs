@@ -23,7 +23,7 @@ yampaCountBench = do
 
 signalCountBench :: IO ()
 signalCountBench = do
-  !x <- Signal.reactimate () $ Signal.feedback count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)
+  !x <- Signal.reactimate $ Signal.feedback count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)
   pure ()
 
 msfCountBench :: IO ()
@@ -50,10 +50,9 @@ signalIntegrateBench :: IO ()
 signalIntegrateBench = do
   !x <-
     Signal.fold
-      ()
       (\_ x -> x)
       0
-      (Signal.withFixedTime 0.1 (\_ -> id) $ pure 1 >>> Signal.integrate (*))
+      (Signal.withFixedTime 0.1 $ \time -> pure 1 >>> Signal.integrate time (*))
       [1 .. integrateSamples]
   pure ()
 
@@ -67,7 +66,7 @@ yampaChainBench = do
 
 signalChainBench :: IO ()
 signalChainBench = do
-  !x <- head <$> Signal.sample () chainTest [0]
+  !x <- head <$> Signal.sample chainTest [0]
   pure ()
 
 msfChainBench :: IO ()
