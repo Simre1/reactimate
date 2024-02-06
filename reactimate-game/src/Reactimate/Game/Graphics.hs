@@ -1,45 +1,38 @@
 {-# LANGUAGE LinearTypes #-}
+{-# HLINT ignore "Use newtype instead of data" #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
-{-# HLINT ignore "Use newtype instead of data" #-}
-
-module Reactimate.Game.Graphics (render, SDL.WindowConfig (..), SDL.defaultWindow, Picture, Camera (..), makePicture, PictureAtoms (..), staticPicture, packColour, packAlphaColour) where
+module Reactimate.Game.Graphics (render, SDL.WindowConfig (..), SDL.defaultWindow, Picture, Camera (..), Image (..), withImage, makePicture, PictureAtoms (..), Blit (..), staticPicture, packColour, packAlphaColour) where
 
 import Control.Monad
 import Data.Colour
 import Data.Colour.SRGB (RGB (..), toSRGB24)
+import Data.Hashable (Hashable (..))
+import Data.Hashable.Generic (genericHashWithSalt)
 import Data.IntMap.Strict qualified as IM
 import Data.Sequence qualified as S
+import Data.Text (Text, unpack)
 import Data.Vector.Storable qualified as VS
 import Data.Word (Word8)
+import Foreign (Storable (..))
+import Foreign.Ptr
 import GHC.Generics (Generic)
 import Linear.V2
 import Linear.V4
-import Reactimate (Signal, allocateResource, arrIO, once)
+import Reactimate (Signal, arrIO, once)
+import Reactimate.Game.Assets (Asset (..), withAsset)
 import Reactimate.Game.Environment (GameEnv (..))
 import Reactimate.Game.Shapes
-import Reactimate.Signal (addFinalizer)
 import SDL qualified
+import SDL.Image qualified as SDL
 import SDL.Primitive qualified as SDL
 
 -- | Creates a new window and renders the given `Picture` with the `Camera` each frame.
 render :: GameEnv -> Signal (Camera, Picture) ()
 render gameEnv =
-  allocateResource
-    ( \fin -> do
-        -- dataDir <- getDataDir
-        -- let window = getWindow r
-        --     primitivesVertexShader = dataDir </> "shaders" </> "primitives.vert"
-        --     primitivesFragmentShader = dataDir </> "shaders" </> "primitives.frag"
-        -- shader <- R.loadShader (Just primitivesVertexShader) (Just primitivesFragmentShader) windowResources
-        -- addFinalizer fin $ R.unloadShader shader windowResources
-        renderer <- SDL.createRenderer gameEnv.window (-1) SDL.defaultRenderer
-        addFinalizer fin $ SDL.destroyRenderer renderer
-        pure renderer
-    )
-    $ \renderer ->
-      arrIO $
-        uncurry (renderScreen gameEnv.window renderer)
+  arrIO $
+    uncurry (renderScreen gameEnv.window gameEnv.renderer)
 {-# INLINE render #-}
 
 -- | A `Picture` is a collection of `PictureAtom`s. `Picture` implements `Semigroup`,
@@ -47,7 +40,7 @@ render gameEnv =
 newtype Picture = Picture
   { pictureParts :: IM.IntMap PicturePart
   }
-  deriving (Eq, Show)
+  deriving (Eq)
 
 instance Semigroup Picture where
   (Picture objects1) <> (Picture objects2) =
@@ -65,7 +58,7 @@ data PicturePart
   | PicturePartAtoms
       { pictureAtoms :: !PictureAtoms
       }
-  deriving (Eq, Show)
+  deriving (Eq)
 
 instance Semigroup PicturePart where
   pp1@(PicturePart position1 parts1) <> pp2@(PicturePart position2 parts2) =
@@ -75,7 +68,25 @@ instance Semigroup PicturePart where
   pp1 <> pp2@(PicturePartAtoms _) = pp1 <> PicturePart (V2 0 0) (S.singleton pp2)
   pp1@(PicturePartAtoms _) <> pp2 = PicturePart (V2 0 0) (S.singleton pp1) <> pp2
 
-newtype PictureAtoms = BasicShapes (VS.Vector (ColouredShape BasicShape)) deriving (Eq, Show)
+data PictureAtoms
+  = BasicShapes !(VS.Vector (ColouredShape BasicShape))
+  | Texture !Image !(VS.Vector Blit)
+  deriving (Eq)
+
+data Blit = Blit
+  { source :: !Rectangle,
+    target :: !Rectangle
+  }
+  deriving (Eq, Show)
+
+instance Storable Blit where
+  sizeOf _ = sizeOf (undefined :: V2 Rectangle)
+  alignment _ = alignment (undefined :: V2 Rectangle)
+  peek ptr = do
+    V2 r1 r2 <- peek $ castPtr ptr
+    pure $ Blit r1 r2
+  poke ptr (Blit r1 r2) = do
+    poke (castPtr ptr) (V2 r1 r2)
 
 -- | A `Camera` can move around and zoom out and in. Only objects which are
 -- visible by the `Camera` are rendered.
@@ -155,8 +166,48 @@ renderAtoms rc offset atoms = case atoms of
     (BSCircularArc (CircularArc position radius startDegree endDegree)) -> do
       let pos = fromIntegral <$> adjustPosition rc.camera rc.renderSize (position + offset)
       SDL.fillPie renderer pos (fromIntegral radius) (fromIntegral startDegree) (fromIntegral endDegree) colour
+  Texture image blits -> VS.forM_ blits $ \(Blit source target) -> do
+    let (V2 _ ty) = image.size
+        (V2 spx spy) = source.position
+        (V2 _ ssy) = source.size
+        textureSource = SDL.Rectangle (fmap fromIntegral $ SDL.P $ V2 spx (ty - spy - ssy)) (fromIntegral <$> source.size)
+        (V2 tpx tpy) = adjustPosition rc.camera rc.renderSize (target.position + offset)
+        ts@(V2 _ tsy) = quot <$> target.size * rc.renderSize <*> rc.camera.viewport
+        screenTarget = SDL.Rectangle (fmap fromIntegral $ SDL.P $ V2 tpx (tpy - tsy)) (fromIntegral <$> ts)
+    SDL.copy renderer image.texture (Just textureSource) (Just screenTarget)
   where
     renderer = rc.renderer
+
+-- toSDLRectangle (Rectangle position@(V2 x y) size@(V2 sx sy)) = SDL.Rectangle (SDL.P $ fromIntegral <$> V2 x (ty - y)) (fromIntegral <$> size)
+
+data ImagePath = ImagePath
+  { renderer :: !SDL.Renderer,
+    path :: !Text
+  }
+  deriving (Eq, Show, Ord, Generic)
+
+instance Hashable ImagePath where
+  hashWithSalt i (ImagePath renderer path) =
+    let i' = genericHashWithSalt i renderer
+     in hashWithSalt i' path
+
+data Image = Image
+  { texture :: !SDL.Texture,
+    size :: !(V2 Int)
+  }
+  deriving (Eq)
+
+instance Asset ImagePath where
+  type AssetValue ImagePath = Image
+  loadAsset (ImagePath renderer path) = do
+    texture <- SDL.loadTexture renderer $ unpack path
+    textureInfo <- SDL.queryTexture texture
+    pure $ Image texture $ fromIntegral <$> V2 textureInfo.textureWidth textureInfo.textureHeight
+  freeAsset _ image = do
+    SDL.destroyTexture image.texture
+
+withImage :: GameEnv -> Text -> (Image -> Signal a b) -> Signal a b
+withImage gameEnv path = withAsset gameEnv.assets (ImagePath gameEnv.renderer path)
 
 -- | `PictureAtom`s are stored in a spatial map. `boundingBoxSize` is the
 -- size of each quadrant.

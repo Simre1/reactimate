@@ -23,7 +23,8 @@ common common
     build-depends:    
         base ^>=4.17.2.1,
         vector,
-        linear
+        linear,
+        text
 
 library
     import:           common
@@ -37,17 +38,21 @@ library
         Reactimate.Game.Shapes,
         Reactimate.Game.Input,
         Reactimate.Game.Environment,
+        Reactimate.Game.Assets,
         
     hs-source-dirs:   src
     build-depends:
         sdl2,
         sdl2-gfx,
+        sdl2-image,
         containers,
         pqueue,
         colour,
         reactimate,
         text,
-        filepath
+        filepath,
+        hashtables,
+        hashable
 
 executable basic-example
     import: common
@@ -55,8 +60,7 @@ executable basic-example
     hs-source-dirs: examples/basic-example
     build-depends:
         reactimate,
-        reactimate-game,
-        text
+        reactimate-game
 
 executable mouse-example
     import: common
@@ -64,8 +68,15 @@ executable mouse-example
     hs-source-dirs: examples/mouse-example
     build-depends:
         reactimate,
-        reactimate-game,
-        text
+        reactimate-game
+
+executable image-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/image-example
+    build-depends:
+        reactimate,
+        reactimate-game
 
 executable bench
     import: common

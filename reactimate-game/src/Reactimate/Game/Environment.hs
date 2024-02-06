@@ -1,8 +1,10 @@
 module Reactimate.Game.Environment (GameEnv (..)) where
 
+import Reactimate.Game.Assets (Assets)
 import SDL qualified
 
-newtype GameEnv = GameEnv
-  { window :: SDL.Window
+data GameEnv = GameEnv
+  { window :: !SDL.Window,
+    renderer :: !SDL.Renderer,
+    assets :: !Assets
   }
-  deriving (Eq, Show)

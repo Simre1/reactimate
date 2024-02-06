@@ -20,8 +20,8 @@ keyboardState _ = makeBehavior $ arrIO $ \_ -> do
   SDL.getKeyboardState
 
 mousePosition :: GameEnv -> Signal Camera (V2 Int)
-mousePosition (GameEnv window) = arrIO $ \camera -> do
-  windowSize <- fmap fromIntegral <$> SDL.get (SDL.windowSize window)
+mousePosition gameEnv = arrIO $ \camera -> do
+  windowSize <- fmap fromIntegral <$> SDL.get (SDL.windowSize gameEnv.window)
   realMousePosition <- fmap fromIntegral . SDL.unP <$> SDL.getAbsoluteMouseLocation
   let (V2 x y) = quot <$> (realMousePosition * camera.viewport) <*> windowSize
       (V2 _ vy) = camera.viewport
