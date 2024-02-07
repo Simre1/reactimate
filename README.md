@@ -72,6 +72,6 @@ Heavily inspired by [Yampa](https://github.com/ivanperez-keera/Yampa) and [dunai
 
 # Reactimate Game
 
-`reactimate-game` is a library for basic 2D games using `SDL`. [Take a look here](reactimate-game/Readme.md).
+`reactimate-game` is a library for basic 2D games using `SDL`. [Take a look here](reactimate-game/README.md).
 
 ![reactimate-games examples](reactimate-game/screenshot.png)
