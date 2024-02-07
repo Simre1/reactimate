@@ -24,7 +24,8 @@ common common
         base ^>=4.17.2.1,
         vector,
         linear,
-        text
+        text,
+        colour
 
 library
     import:           common
@@ -47,7 +48,6 @@ library
         sdl2-image,
         containers,
         pqueue,
-        colour,
         reactimate,
         text,
         filepath,

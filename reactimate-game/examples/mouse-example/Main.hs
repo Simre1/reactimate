@@ -1,12 +1,10 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Control.Arrow (Arrow (..))
-import Control.Category ((>>>))
 import Data.Vector.Storable qualified as VS
-import Debug.Trace (traceShowId)
 import Reactimate
 import Reactimate.Game
+import Data.Colour.Names
 
 main :: IO ()
 main = reactimate $ limitSampleRate 60 $ setupGame (GameConfig "Mouse example" defaultWindow) $ \gameEnv ->

@@ -2,13 +2,13 @@
 
 module Main where
 
-import Control.Arrow
 import Data.Vector.Storable qualified as VS
 import Gauge (Config (timeLimit))
 import Gauge.Main
 import Gauge.Main.Options (defaultConfig)
 import Reactimate
 import Reactimate.Game
+import Data.Colour.Names
 
 renderRectangles :: GameEnv -> Signal Int ()
 renderRectangles gameEnv = constant (camera, picture) >>> render gameEnv

@@ -1,9 +1,27 @@
-{-# LANGUAGE LinearTypes #-}
-{-# HLINT ignore "Use newtype instead of data" #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
-module Reactimate.Game.Graphics (render, SDL.WindowConfig (..), SDL.defaultWindow, Picture, Camera (..), Image (..), withImage, makePicture, PictureAtoms (..), Blit (..), staticPicture, packColour, packAlphaColour) where
+module Reactimate.Game.Graphics
+  ( render,
+    Camera (..),
+
+    -- * Picture
+    Picture,
+    makePicture,
+    staticPicture,
+    PictureAtoms (..),
+    Blit (..),
+
+    -- ** Colours
+    packColour,
+    Colour,
+    packAlphaColour,
+    AlphaColour,
+
+    -- ** Image loading
+    Image (..),
+    withImage,
+  )
+where
 
 import Control.Monad
 import Data.Colour
@@ -28,14 +46,14 @@ import SDL qualified
 import SDL.Image qualified as SDL
 import SDL.Primitive qualified as SDL
 
--- | Creates a new window and renders the given `Picture` with the `Camera` each frame.
+-- | Renders the given `Picture` with the `Camera` each frame.
 render :: GameEnv -> Signal (Camera, Picture) ()
 render gameEnv =
   arrIO $
     uncurry (renderScreen gameEnv.window gameEnv.renderer)
 {-# INLINE render #-}
 
--- | A `Picture` is a collection of `PictureAtom`s. `Picture` implements `Semigroup`,
+-- | A `Picture` is a collection of `PictureAtoms`. `Picture` implements `Semigroup`,
 -- so multiple `Picture`s can be combined.
 newtype Picture = Picture
   { pictureParts :: IM.IntMap PicturePart
@@ -68,11 +86,14 @@ instance Semigroup PicturePart where
   pp1 <> pp2@(PicturePartAtoms _) = pp1 <> PicturePart (V2 0 0) (S.singleton pp2)
   pp1@(PicturePartAtoms _) <> pp2 = PicturePart (V2 0 0) (S.singleton pp1) <> pp2
 
+-- | `PictureAtoms` are the building blocks of `Picture`s.
 data PictureAtoms
   = BasicShapes !(VS.Vector (ColouredShape BasicShape))
   | Texture !Image !(VS.Vector Blit)
   deriving (Eq)
 
+-- | A `Blit` contains source and target rectangles. They are used to copy
+-- parts of some source texture onto a target texture. For `PictureAtoms`, the target is the screen.
 data Blit = Blit
   { source :: !Rectangle,
     target :: !Rectangle
@@ -96,8 +117,8 @@ data Camera = Camera
   }
   deriving (Eq, Show, Generic)
 
--- | Make a `Picture` from a `PictureAtom` at the given z-level.
--- `PictureAtom`s with higher z-level are rendered over ones with lower z-level.
+-- | Make a `Picture` from a `PictureAtoms` at the given z-level.
+-- `PictureAtoms` with higher z-level are rendered over ones with lower z-level.
 makePicture :: Int -> PictureAtoms -> Picture
 makePicture zIndex pictureAtoms =
   Picture $ IM.singleton zIndex $ PicturePartAtoms pictureAtoms
@@ -112,12 +133,14 @@ adjustPosition :: Camera -> V2 Int -> V2 Int -> V2 Int
 adjustPosition (Camera (V2 cx cy) (V2 vx vy)) (V2 wx wy) (V2 x y) =
   V2 ((x - cx) * wx `quot` vx) (wy - ((y - cy) * wy `quot` vy))
 
+-- | Pack an `AlphaColour` so that it can be used for `PictureAtoms`. Include the /colour/ package to make colours!
 packAlphaColour :: AlphaColour Float -> V4 Word8
 packAlphaColour colour =
   let (RGB r g b) = toSRGB24 (colour `over` black)
       alpha = truncate $ alphaChannel colour * 255
    in V4 r g b alpha
 
+-- | Pack a `Colour` so that it can be used for `PictureAtoms`. Include the /colour/ package to make colours!
 packColour :: Colour Float -> V4 Word8
 packColour colour =
   let (RGB r g b) = toSRGB24 colour
@@ -191,6 +214,8 @@ instance Hashable ImagePath where
     let i' = genericHashWithSalt i renderer
      in hashWithSalt i' path
 
+-- | An `Image` contains the GPU texture of the image so that it can be used
+-- for rendering
 data Image = Image
   { texture :: !SDL.Texture,
     size :: !(V2 Int)
@@ -206,10 +231,11 @@ instance Asset ImagePath where
   freeAsset _ image = do
     SDL.destroyTexture image.texture
 
+-- | Load an image from the given path during the setup phase such that you can use it for rendering
 withImage :: GameEnv -> Text -> (Image -> Signal a b) -> Signal a b
 withImage gameEnv path = withAsset gameEnv.assets (ImagePath gameEnv.renderer path)
 
--- | `PictureAtom`s are stored in a spatial map. `boundingBoxSize` is the
+-- | `PictureAtoms` are stored in a spatial map. `boundingBoxSize` is the
 -- size of each quadrant.
 -- boundingBoxSize :: V2 Int
 -- boundingBoxSize = pure 2048

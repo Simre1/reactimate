@@ -1,12 +1,17 @@
-{-# LANGUAGE OverloadedStrings #-}
+module Reactimate.Game
+  ( module Setup,
+    module Environment,
+    module Graphics,
+    module Shapes,
+    module Input,
+    V2 (..),
+    V4 (..),
+  )
+where
 
-module Reactimate.Game (module Colour, GameEnv, V2(..), module Setup, module Graphics, module Input, module Shapes) where
-
+import Linear
+import Reactimate.Game.Environment as Environment
 import Reactimate.Game.Graphics as Graphics
-import Reactimate.Game.Setup as Setup
 import Reactimate.Game.Input as Input
+import Reactimate.Game.Setup as Setup
 import Reactimate.Game.Shapes as Shapes
-import Linear.V2
-import Data.Colour as Colour
-import Data.Colour.Names as Colour
-import Reactimate.Game.Environment

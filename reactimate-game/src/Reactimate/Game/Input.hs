@@ -1,7 +1,15 @@
-module Reactimate.Game.Input (inputEvents, keyboardState, mousePosition, mouseButtons, module SDL.Event, module SDL.Input.Keyboard, module SDL.Input.Mouse) where
+module Reactimate.Game.Input
+  ( inputEvents,
+    keyboardState,
+    mousePosition,
+    mouseButtons,
+    module SDL.Event,
+    module SDL.Input.Keyboard,
+    module SDL.Input.Mouse,
+  )
+where
 
 import Linear (V2 (..))
-import Linear.V2 (V2)
 import Reactimate
 import Reactimate.Game.Environment (GameEnv (..))
 import Reactimate.Game.Graphics (Camera (..))
@@ -10,15 +18,18 @@ import SDL.Event qualified
 import SDL.Input.Keyboard qualified
 import SDL.Input.Mouse qualified
 
+-- | Handle SDL events as they happen. This can be useful if you want to catch events which happen in between simulations. 
 inputEvents :: GameEnv -> Event SDL.Event
 inputEvents _ = callback $ \fin fire -> do
   eventWatch <- SDL.addEventWatch fire
   addFinalizer fin $ SDL.delEventWatch eventWatch
 
+-- | Get the current keyboard state.
 keyboardState :: GameEnv -> Behavior (SDL.Scancode -> Bool)
 keyboardState _ = makeBehavior $ arrIO $ \_ -> do
   SDL.getKeyboardState
 
+-- | Get the position of the mouse relative to the camera.
 mousePosition :: GameEnv -> Signal Camera (V2 Int)
 mousePosition gameEnv = arrIO $ \camera -> do
   windowSize <- fmap fromIntegral <$> SDL.get (SDL.windowSize gameEnv.window)
@@ -27,6 +38,7 @@ mousePosition gameEnv = arrIO $ \camera -> do
       (V2 _ vy) = camera.viewport
   pure $ V2 x (vy - y)
 
+-- | Get the current mouse button state
 mouseButtons :: GameEnv -> Behavior (SDL.MouseButton -> Bool)
 mouseButtons _ = makeBehavior $ arrIO $ const $ do
   SDL.getMouseButtons

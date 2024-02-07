@@ -13,7 +13,7 @@ import Reactimate.Signal
 
 -- | Events are like @Signal () a@, they produce values of @a@ and require no input.
 -- Events occure at some unknown time, so they cannot simply be sampled with run functions like 'reactimate'.
--- Instead, @Event r a@ is a @Signal r () a@ which is sampled independently from the main loop when the event happens.
+-- Instead, you can think of @Event r a@ as a @Signal r () a@ which is whenever the event happens, completely independent from the main loop.
 data Event a where
   Event ::
     { signal :: !(Signal x a),

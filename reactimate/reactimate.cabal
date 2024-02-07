@@ -47,7 +47,7 @@ executable bench
         reactimate,
         Yampa,
         dunai,
-        benchpress
+        gauge
     hs-source-dirs:   bench
     main-is: Main.hs
     ghc-options: -O2

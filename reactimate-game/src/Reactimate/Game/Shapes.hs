@@ -1,6 +1,17 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Reactimate.Game.Shapes where
+module Reactimate.Game.Shapes
+  ( -- * Shapes
+    BasicShape (..),
+    ColouredShape (..),
+
+    -- * Shape types
+    Rectangle (..),
+    Ellipse (..),
+    Triangle (..),
+    CircularArc (..),
+  )
+where
 
 import Data.Kind (Type)
 import Foreign

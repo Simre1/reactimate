@@ -7,6 +7,7 @@ import Data.Vector.Storable qualified as VS
 import Reactimate
 import Reactimate.Game
 import Reactimate.Stateful (sumUp)
+import Data.Colour.Names
 
 main :: IO ()
 main =
