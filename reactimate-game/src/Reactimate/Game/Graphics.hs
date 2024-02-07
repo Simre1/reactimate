@@ -110,7 +110,7 @@ staticPicture = once
 -- | Moves points from global coordinates to screen coordinates.
 adjustPosition :: Camera -> V2 Int -> V2 Int -> V2 Int
 adjustPosition (Camera (V2 cx cy) (V2 vx vy)) (V2 wx wy) (V2 x y) =
-  V2 ((x - cx) * wx `quot` vx) (wy - (y + cy) * wy `quot` vy)
+  V2 ((x - cx) * wx `quot` vx) (wy - ((y - cy) * wy `quot` vy))
 
 packAlphaColour :: AlphaColour Float -> V4 Word8
 packAlphaColour colour =
