@@ -49,27 +49,6 @@ sum = feedback 0 $ arr \(input, acc) ->
 
 `feedback` takes some initial state and then accumulates this state over simulations. The state from the last execution is fed back as input. The `sum` signal produces the sum of all its inputs by keeping track of the last output.
 
-## Microbenchmarks
-
-Beware that micro benchmarks may not reflect 1 to 1 on real applications. The actual performance gain on applications still needs to be tested.
-
-```
-Countdown benchmark/Yampa                mean 27.80 ms  ( +- 192.7 μs  )
-Countdown benchmark/dunai                mean 70.35 ms  ( +- 261.6 μs  )
-Countdown benchmark/reactimate           mean 388.0 μs  ( +- 409.2 ns  )
-
-Integrate benchmark/Yampa                mean 98.37 ms  ( +- 229.2 μs  )
-Integrate benchmark/reactimate           mean 9.719 ms  ( +- 45.72 μs  )
-
-Chaining (>>>) benchmark/Yampa           mean 26.71 ms  ( +- 407.0 μs  )
-Chaining (>>>) benchmark/dunai           mean 75.62 ms  ( +- 3.863 ms  )
-Chaining (>>>) benchmark/reactimate      mean 3.703 ms  ( +- 61.67 μs  )
-```
-
-## Acknowledgements
-
-Heavily inspired by [Yampa](https://github.com/ivanperez-keera/Yampa) and [dunai](https://github.com/ivanperez-keera/dunai).
-
 # Reactimate Game
 
 `reactimate-game` is a library for basic 2D games using `SDL`. [Take a look here](reactimate-game).
