@@ -25,7 +25,8 @@ common common
         vector,
         linear,
         text,
-        colour
+        colour,
+        sdl2
 
 library
     import:           common
@@ -40,10 +41,10 @@ library
         Reactimate.Game.Input,
         Reactimate.Game.Environment,
         Reactimate.Game.Assets,
+        Reactimate.Game.Tasks
         
     hs-source-dirs:   src
     build-depends:
-        sdl2,
         sdl2-gfx,
         sdl2-image,
         containers,
@@ -77,6 +78,15 @@ executable image-example
     build-depends:
         reactimate,
         reactimate-game
+
+executable snake-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/snake-example
+    build-depends:
+        reactimate,
+        reactimate-game,
+        containers
 
 executable bench
     import: common

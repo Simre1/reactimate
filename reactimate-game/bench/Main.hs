@@ -11,7 +11,7 @@ import Reactimate.Game
 import Data.Colour.Names
 
 renderRectangles :: GameEnv -> Signal Int ()
-renderRectangles gameEnv = constant (camera, picture) >>> render gameEnv
+renderRectangles gameEnv = constant (camera, picture) >>> renderGame gameEnv
   where
     rectsAmount = 1000
     camera = Camera (V2 0 300) (V2 rectsAmount 20)
@@ -23,5 +23,5 @@ main = do
     defaultConfig {timeLimit = Just 10}
     [ bench "Render rectangles" $
         nfIO $
-          sample (setupGame (GameConfig "Bench" defaultWindow) renderRectangles) [0 .. 360]
+          sample (setupGame (GameConfig "Bench" defaultWindow maxBound) renderRectangles) [0 .. 360]
     ]

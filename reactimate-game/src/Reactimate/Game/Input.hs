@@ -2,10 +2,7 @@ module Reactimate.Game.Input
   ( inputEvents,
     keyboardState,
     mousePosition,
-    mouseButtons,
-    module SDL.Event,
-    module SDL.Input.Keyboard,
-    module SDL.Input.Mouse,
+    mouseButtons
   )
 where
 
@@ -14,9 +11,6 @@ import Reactimate
 import Reactimate.Game.Environment (GameEnv (..))
 import Reactimate.Game.Graphics (Camera (..))
 import SDL qualified
-import SDL.Event qualified
-import SDL.Input.Keyboard qualified
-import SDL.Input.Mouse qualified
 
 -- | Handle SDL events as they happen. This can be useful if you want to catch events which happen in between simulations. 
 inputEvents :: GameEnv -> Event SDL.Event

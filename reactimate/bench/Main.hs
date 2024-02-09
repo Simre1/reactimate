@@ -23,7 +23,7 @@ yampaCountBench = do
 
 signalCountBench :: IO ()
 signalCountBench = do
-  !x <- Signal.reactimate $ Signal.feedback count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)
+  !x <- Signal.reactimate $ Signal.feedbackState count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)
   pure ()
 
 msfCountBench :: IO ()

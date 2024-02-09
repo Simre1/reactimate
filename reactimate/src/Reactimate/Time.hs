@@ -1,4 +1,4 @@
-module Reactimate.Time (Time, withTime, withFixedTime, deltaTime, currentTime, integrate) where
+module Reactimate.Time (Time(..), withTime, withFixedTime, deltaTime, currentTime, integrate) where
 
 import Control.Arrow
 import Control.Category (Category (id))
@@ -7,9 +7,8 @@ import GHC.Clock (getMonotonicTime)
 import GHC.IORef (writeIORef)
 import GHC.Records
 import Reactimate.Basic (arrIO)
-import Reactimate.Setup
 import Reactimate.Signal
-import Reactimate.Stateful (feedback)
+import Reactimate.Stateful (feedbackState)
 import Prelude hiding (id)
 
 -- | Tracks `currentTime` and `deltaTime`.
@@ -67,7 +66,7 @@ currentTime time = arrIO (const $ readIORef $ getField @"cTime" time)
 integrate :: (Num a) => Time -> (Double -> a -> a) -> Signal a a
 integrate time scale =
   deltaTime time &&& id
-    >>> feedback
+    >>> feedbackState
       0
       ( arr $ \((dt, value), !previous) ->
           let !next = previous + scale dt value in (next, next)

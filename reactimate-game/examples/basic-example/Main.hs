@@ -12,9 +12,8 @@ import Data.Colour.Names
 main :: IO ()
 main =
   reactimate $
-    setupGame (GameConfig "Basic Example" defaultWindow) $ \gameEnv ->
-      limitSampleRate 60 $
-        game >>> render gameEnv >>> constant Nothing
+    setupGame (GameConfig "Basic Example" defaultWindow 60) $ \gameEnv ->
+        game >>> renderGame gameEnv >>> constant Nothing
 
 game :: Signal () (Camera, Picture)
 game = constant 1 >>> sumUp >>> arr (\x -> (camera, shapes x))

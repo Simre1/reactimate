@@ -39,15 +39,13 @@ With `reactimate`, it is easily possible to implement a game loop or some other 
 
 State can be easily integreated in a `Signal` with the `feedback` function:
 ```haskell
-feedback :: s -> Signal (a, s) (b, s) -> Signal a b
+feedback :: b -> Signal (a, b) b -> Signal a b
 
 sum :: Signal Int Int
-sum = feedback 0 $ arr \(input, acc) -> 
-  let output = input + acc
-  in (output, output)
+sum = feedback 0 $ arr \(input, acc) -> input + acc
 ```
 
-`feedback` takes some initial state and then accumulates this state over simulations. The state from the last execution is fed back as input. The `sum` signal produces the sum of all its inputs by keeping track of the last output.
+`feedback` takes some initial state and then accumulates this state over simulations. The output from the last execution is fed back as input. The `sum` signal produces the sum of all its inputs by keeping track of the last output.
 
 # Reactimate Game
 

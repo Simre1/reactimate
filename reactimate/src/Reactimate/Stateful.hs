@@ -5,9 +5,21 @@ import Data.IORef
 import Reactimate.Basic
 import Reactimate.Signal
 
--- | Feeds the output state back as input. The state @s@ is strict.
-feedback :: s -> Signal (a, s) (b, s) -> Signal a b
+-- | Feeds the output back as input.
+feedback :: b -> Signal (a, b) b -> Signal a b
 feedback !initial (Signal signal) = Signal $ \fin -> do
+  f <- signal fin 
+  stateRef <- newIORef initial
+  pure $ \a -> do
+    !b <- readIORef stateRef
+    !nextB <- f (a,b)
+    writeIORef stateRef nextB
+    pure nextB
+{-# INLINE feedback #-}
+
+-- | Feeds the output state back as input. The state @s@ is strict.
+feedbackState :: s -> Signal (a, s) (b, s) -> Signal a b
+feedbackState !initial (Signal signal) = Signal $ \fin -> do
   f <- signal fin 
   stateRef <- newIORef initial
   pure $ \a -> do
@@ -15,11 +27,11 @@ feedback !initial (Signal signal) = Signal $ \fin -> do
     (b, !s') <- f (a, s)
     writeIORef stateRef s'
     pure b
-{-# INLINE feedback #-}
+{-# INLINE feedbackState #-}
 
 -- | Feeds the output state back as input. The state @s@ is lazy, so beware space leaks.
-lazyFeedback :: s -> Signal (a, s) (b, s) -> Signal a b
-lazyFeedback initial (Signal signal) = Signal $ \fin -> do
+feedbackLazyState :: s -> Signal (a, s) (b, s) -> Signal a b
+feedbackLazyState initial (Signal signal) = Signal $ \fin -> do
   f <- signal fin 
   stateRef <- newIORef initial
   pure $ \a -> do
@@ -27,11 +39,11 @@ lazyFeedback initial (Signal signal) = Signal $ \fin -> do
     (b, s') <- f (a, s)
     writeIORef stateRef s'
     pure b
-{-# INLINE lazyFeedback #-}
+{-# INLINE feedbackLazyState #-}
 
 -- | Scan along time. The first function will be run each execution with the input @a@, produce the output @b@ and reuse @b@ as state for the next iteration.
 scan :: (b -> a -> b) -> b -> Signal a b
-scan f initial = feedback initial (arr2 (flip f) >>> dup)
+scan f initial = feedbackState initial (arr2 (flip f) >>> dup)
 {-# INLINE scan #-}
 
 -- | Sums up the input values

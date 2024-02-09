@@ -1,7 +1,7 @@
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 
-module Reactimate.Game.Assets (Assets, makeAssets, Asset(..), withAsset) where
+module Reactimate.Game.Assets (Assets, makeAssets, Asset (..), withAsset) where
 
 import Data.HashTable.IO qualified as H
 import Data.Hashable (Hashable)
@@ -49,6 +49,7 @@ insertAsset assets key value = do
   weakAsset <- mkWeakPtr value (Just $ freeAsset key value)
   H.insert assetStore key weakAsset
 
+-- | Load an asset during the `setup` phase.
 withAsset :: forall key a b. (Asset key) => Assets -> key -> (AssetValue key -> Signal a b) -> Signal a b
 withAsset assets key = withSetup $ do
   maybeAssetValue <- lookupAsset assets key
@@ -59,3 +60,6 @@ withAsset assets key = withSetup $ do
       insertAsset assets key asset
       pure asset
 
+-- | An `AssetHandle` is a reference to an asset. An `AssetHandle` may change its referenced asset. For example,
+-- an asset might be loaded asynchronically, replacing the default asset with the loaded asset.
+-- newtype AssetHandle a = AssetHandle (IO a) deriving (Functor, Applicative, Monad, Semigroup, Monoid)

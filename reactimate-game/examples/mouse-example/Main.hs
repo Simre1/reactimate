@@ -7,8 +7,8 @@ import Reactimate.Game
 import Data.Colour.Names
 
 main :: IO ()
-main = reactimate $ limitSampleRate 60 $ setupGame (GameConfig "Mouse example" defaultWindow) $ \gameEnv ->
-  constant camera >>> mousePosition gameEnv >>> game >>> render gameEnv >>> constant Nothing
+main = reactimate $ setupGame (GameConfig "Mouse example" defaultWindow 60) $ \gameEnv ->
+  constant camera >>> mousePosition gameEnv >>> game >>> renderGame gameEnv >>> constant Nothing
 
 camera :: Camera
 camera = Camera (V2 0 0) (V2 800 600)

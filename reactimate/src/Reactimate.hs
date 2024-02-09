@@ -22,10 +22,11 @@ module Reactimate
     (+++),
     left,
     right,
-    
+
     -- * Stateful signals
     feedback,
-    lazyFeedback,
+    feedbackState,
+    feedbackLazyState,
     scan,
 
     -- * Delay signals
@@ -48,6 +49,12 @@ module Reactimate
     currentTime,
     deltaTime,
     integrate,
+
+    -- * Random signals,
+    generateRandom,
+    generateRandomRange,
+    generateRandomWithRNG,
+    generateRandomRangeWithRNG,
 
     -- * Run signals
     reactimate,
@@ -73,17 +80,18 @@ module Reactimate
     sampleEvent,
     sampleEventAsList,
     sampleBehavior,
-    sampleDynamic
+    sampleDynamic,
   )
 where
 
 import Control.Arrow
 import Reactimate.Basic
 import Reactimate.Delay
-import Reactimate.Setup
 import Reactimate.Event
+import Reactimate.Random
 import Reactimate.Run
 import Reactimate.Sampling
+import Reactimate.Setup
 import Reactimate.Signal
 import Reactimate.Stateful
 import Reactimate.Switching

@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Reactimate.Game.Graphics
-  ( render,
+  ( renderGame,
     Camera (..),
 
     -- * Picture
@@ -47,11 +47,11 @@ import SDL.Image qualified as SDL
 import SDL.Primitive qualified as SDL
 
 -- | Renders the given `Picture` with the `Camera` each frame.
-render :: GameEnv -> Signal (Camera, Picture) ()
-render gameEnv =
+renderGame :: GameEnv -> Signal (Camera, Picture) ()
+renderGame gameEnv =
   arrIO $
     uncurry (renderScreen gameEnv.window gameEnv.renderer)
-{-# INLINE render #-}
+{-# INLINE renderPicture #-}
 
 -- | A `Picture` is a collection of `PictureAtoms`. `Picture` implements `Semigroup`,
 -- so multiple `Picture`s can be combined.
