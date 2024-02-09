@@ -21,7 +21,7 @@ gameConfig =
 
 main :: IO ()
 main = reactimate $ setupGame gameConfig $ \gameEnv ->
-  captureInput gameEnv >>> (feedback (initialGameState 0) stepGame >>> printScore &&& render gameEnv) &&& shouldQuit >>> arr snd
+  captureInput gameEnv >>> (feedback initialGameState stepGame >>> render gameEnv) &&& shouldQuit >>> arr snd
 
 data Input = MoveLeft | MoveRight | MoveUp | MoveDown | NoAction | Quit deriving (Eq, Ord, Show)
 
@@ -57,14 +57,14 @@ captureInput gameEnv =
           else is
       _ -> is
 
-initialGameState :: Int -> GameState
-initialGameState score =
+initialGameState :: GameState
+initialGameState =
   GameState
     { snake = [V2 5 5],
       direction = V2 1 0,
       food = Just (V2 10 10),
       running = False,
-      score
+      score = 0
     }
 
 gameBounds :: V2 Int
@@ -74,7 +74,7 @@ stepGame :: Signal (Input, GameState) GameState
 stepGame =
   generateRandomRange (V2 1 1, gameBounds - V2 2 2)
     &&& identity
-    >>> arr
+    >>> arrIO
       ( \(rngV2, (input, GameState snake direction food running score)) ->
           if running
             then
@@ -85,12 +85,14 @@ stepGame =
                   nextFood = if snakeEats then Just rngV2 else food
                   nextScore = if snakeEats then score + 1 else score
                in if isDead nextSnake
-                    then initialGameState score
-                    else GameState nextSnake nextDirection nextFood True nextScore
+                    then do
+                      putStrLn $ "Score: " ++ show score
+                      pure initialGameState 
+                    else pure $ GameState nextSnake nextDirection nextFood True nextScore
             else
               if shouldStartGame input
-                then GameState snake direction food True score
-                else GameState snake direction food False 0
+                then pure $ GameState snake direction food True 0
+                else pure $ GameState snake direction food False 0
       )
   where
     shouldStartGame i = case i of
@@ -129,13 +131,6 @@ render gameEnv = arr (\gs -> (camera, gameStatePicture gs)) >>> renderGame gameE
        in ColouredShape (packColour $ sRGB24 0 (255 - i * 2) (i * 3)) $ BSRectangle (Rectangle pos (V2 1 1))
     foodShape pos = ColouredShape (packColour red) $ BSRectangle (Rectangle pos (V2 1 1))
     camera = Camera (V2 0 0) gameBounds
-
-printScore :: Signal GameState ()
-printScore = (>>> constant ()) $ feedback False $ arrIO $ \(gameState, alivePreviously) -> do
-  when (not gameState.running && alivePreviously) $
-    putStrLn $
-      "Score: " ++ show gameState.score
-  pure gameState.running
 
 shouldQuit :: Signal Input (Maybe ())
 shouldQuit = arr $ \i -> if i == Quit then Just () else Nothing
