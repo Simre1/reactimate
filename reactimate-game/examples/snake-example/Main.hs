@@ -81,18 +81,20 @@ stepGame =
               let nextDirection = adaptDirection input direction
                   nextHead = nextDirection + head snake
                   snakeEats = Just nextHead == food
-                  nextSnake = shortenSnake food (nextHead : snake)
+                  nextSnake = if snakeEats || length snake == 1
+                    then nextHead : snake
+                    else nextHead : init snake
                   nextFood = if snakeEats then Just rngV2 else food
                   nextScore = if snakeEats then score + 1 else score
                in if isDead nextSnake
                     then do
                       putStrLn $ "Score: " ++ show score
-                      pure initialGameState 
+                      pure $ GameState nextSnake nextDirection nextFood False nextScore
                     else pure $ GameState nextSnake nextDirection nextFood True nextScore
             else
               if shouldStartGame input
-                then pure $ GameState snake direction food True 0
-                else pure $ GameState snake direction food False 0
+                then pure $ initialGameState {running = True}
+                else pure $ GameState snake direction food False score
       )
   where
     shouldStartGame i = case i of
@@ -101,12 +103,6 @@ stepGame =
       MoveUp -> True
       MoveDown -> True
       _ -> False
-    shortenSnake _ [] = []
-    shortenSnake _ [x] = [x]
-    shortenSnake foodPos (x : xs) =
-      if Just x == foodPos
-        then x : xs
-        else init (x : xs)
     isDead snake =
       let snakeHead@(V2 x y) = head snake
           (V2 maxX maxY) = gameBounds
