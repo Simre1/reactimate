@@ -1,1 +1,3 @@
 packages: reactimate, reactimate-game
+
+allow-newer: hashable

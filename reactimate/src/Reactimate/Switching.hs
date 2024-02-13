@@ -33,7 +33,7 @@ manyCaseSignal (Signal makeDecider) makeSignal = Signal $ \fin -> do
 {-# INLINE manyCaseSignal #-}
 
 -- | Switch out a signal function with another when you produce a @Just c@ value.
--- The next signal function will become active in the next iteration.
+-- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.  
 switch :: Signal a (b, Maybe c) -> (c -> Signal a b) -> Signal a b
 switch signal kont = Signal $ \fin -> mdo
   newFin <- newFinalizer
@@ -47,6 +47,6 @@ switch signal kont = Signal $ \fin -> mdo
         newStep <- unSignal (kont c) fin
         writeIORef stepRef newStep
         runFinalizer newFin
-        pure b
+        newStep a
 
   readIORef stepRef

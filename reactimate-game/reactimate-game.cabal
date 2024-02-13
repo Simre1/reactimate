@@ -20,6 +20,7 @@ common common
     default-extensions:
         OverloadedRecordDot
         DuplicateRecordFields
+        LambdaCase
     build-depends:    
         base ^>=4.17.2.1,
         vector,
@@ -41,7 +42,8 @@ library
         Reactimate.Game.Input,
         Reactimate.Game.Environment,
         Reactimate.Game.Assets,
-        Reactimate.Game.Tasks
+        Reactimate.Game.Tasks,
+        Reactimate.Game.Physics2D
         
     hs-source-dirs:   src
     build-depends:
@@ -53,7 +55,9 @@ library
         text,
         filepath,
         hashtables,
-        hashable
+        hashable,
+        chiphunk,
+        StateVar
 
 executable basic-example
     import: common
@@ -87,6 +91,15 @@ executable snake-example
         reactimate,
         reactimate-game,
         containers
+
+executable physics-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/physics-example
+    build-depends:
+        reactimate,
+        reactimate-game,
+        chiphunk
 
 executable bench
     import: common

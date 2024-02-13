@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+
 module Reactimate.Signal where
 
 import Control.Arrow
@@ -28,8 +29,8 @@ instance Functor (Signal a) where
 instance Applicative (Signal a) where
   pure a = Signal $ \_ -> pure $ \_ -> pure a
   (Signal signal1) <*> (Signal signal2) = Signal $ \fin -> do
-    f1 <- signal1 fin 
-    f2 <- signal2 fin 
+    f1 <- signal1 fin
+    f2 <- signal2 fin
     pure $ \a -> f1 a <*> f2 a
   {-# INLINE pure #-}
   {-# INLINE (<*>) #-}
@@ -37,8 +38,8 @@ instance Applicative (Signal a) where
 instance Category Signal where
   id = Signal $ \_ -> pure $ \a -> pure a
   (Signal signal1) . (Signal signal2) = Signal $ \fin -> do
-    f1 <- signal1 fin 
-    f2 <- signal2 fin 
+    f1 <- signal1 fin
+    f2 <- signal2 fin
     pure $ f2 >=> f1
   {-# INLINE id #-}
   {-# INLINE (.) #-}
@@ -46,18 +47,18 @@ instance Category Signal where
 instance Arrow Signal where
   arr f = Signal $ \_ -> pure $ pure . f
   first (Signal signal) = Signal $ \fin -> do
-    f <- signal fin 
+    f <- signal fin
     pure $ \(a, b) -> (,b) <$> f a
   second (Signal signal) = Signal $ \fin -> do
-    f <- signal fin 
+    f <- signal fin
     pure $ \(a, b) -> (a,) <$> f b
   (Signal signal1) *** (Signal signal2) = Signal $ \fin -> do
-    f1 <- signal1 fin 
-    f2 <- signal2 fin 
+    f1 <- signal1 fin
+    f2 <- signal2 fin
     pure $ \(a, b) -> (,) <$> f1 a <*> f2 b
   (Signal signal1) &&& (Signal signal2) = Signal $ \fin -> do
-    f1 <- signal1 fin 
-    f2 <- signal2 fin 
+    f1 <- signal1 fin
+    f2 <- signal2 fin
     pure $ \a -> (,) <$> f1 a <*> f2 a
   {-# INLINE arr #-}
   {-# INLINE first #-}
@@ -66,27 +67,27 @@ instance Arrow Signal where
   {-# INLINE (&&&) #-}
 
 instance ArrowChoice Signal where
-  left signal = Signal $ \fin  -> do
-    f <- unSignal signal fin 
+  left signal = Signal $ \fin -> do
+    f <- unSignal signal fin
     pure $ \case
       Left a -> Left <$> f a
       Right d -> pure $ Right d
 
   right signal = Signal $ \fin -> do
-    f <- unSignal signal fin 
+    f <- unSignal signal fin
     pure $ \case
       Right a -> Right <$> f a
       Left d -> pure $ Left d
 
   signal1 +++ signal2 = Signal $ \fin -> do
-    f1 <- unSignal signal1 fin 
-    f2 <- unSignal signal2 fin 
+    f1 <- unSignal signal1 fin
+    f2 <- unSignal signal2 fin
     pure $ \case
       Left a -> Left <$> f1 a
       Right a -> Right <$> f2 a
-  signal1 ||| signal2 = Signal $ \fin  -> do
-    f1 <- unSignal signal1 fin 
-    f2 <- unSignal signal2 fin 
+  signal1 ||| signal2 = Signal $ \fin -> do
+    f1 <- unSignal signal1 fin
+    f2 <- unSignal signal2 fin
     pure $ \case
       Left a -> f1 a
       Right a -> f2 a
@@ -106,7 +107,7 @@ newtype Finalizer = Finalizer (IORef (IO ()))
 
 -- | Add a clean-up function to a `Finalizer`
 addFinalizer :: Finalizer -> IO () -> IO ()
-addFinalizer (Finalizer ref) fin = modifyIORef' ref (>> fin)
+addFinalizer (Finalizer ref) fin = modifyIORef' ref (fin >>)
 {-# INLINE addFinalizer #-}
 
 -- | Make a new `Finalizer`

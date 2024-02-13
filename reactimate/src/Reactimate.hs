@@ -9,6 +9,7 @@ module Reactimate
     arr,
     arr2,
     arrIO,
+    actionIO,
     dup,
 
     -- * Combinators
@@ -39,6 +40,7 @@ module Reactimate
 
     -- * Signal Setup
     withSetup,
+    withSetup_,
     allocateResource,
     addFinalizer,
 

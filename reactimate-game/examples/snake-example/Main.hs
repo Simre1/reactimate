@@ -1,7 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import Control.Monad (when)
 import Data.Colour.Names (red)
 import Data.Colour.SRGB (sRGB24)
 import Data.Foldable (toList)

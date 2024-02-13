@@ -27,3 +27,8 @@ constant = pure
 arrIO :: (a -> IO b) -> Signal a b
 arrIO f = Signal $ \_ -> pure f
 {-# INLINE arrIO #-}
+
+-- | Run an IO action during a signal function without input.
+actionIO :: IO a -> Signal x a
+actionIO action = Signal $ \_ -> pure (const action)
+{-# INLINE actionIO #-}

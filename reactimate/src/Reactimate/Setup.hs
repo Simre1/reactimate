@@ -18,3 +18,10 @@ withSetup setup signal = Signal $ \fin -> do
   unSignal (signal r) fin
 {-# INLINE withSetup #-}
 
+-- | Do some setup before any signal functions actually run.
+-- The setup action will be run **once** before any signal functions produce outputs.
+withSetup_ :: IO r -> Signal a b -> Signal a b
+withSetup_ setup signal = Signal $ \fin -> do
+  _ <- setup
+  unSignal signal fin
+{-# INLINE withSetup_ #-}
