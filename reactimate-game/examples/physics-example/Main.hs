@@ -15,17 +15,17 @@ main = reactimate $ setupGame (GameConfig "Physics example" defaultWindow 60) $ 
 
           body1 <- addDynamicBody space 1 (1 / 0) -- 1 / 0 -> locks rotation due to infinite inertia
           body1.position $= V2 250 300
-          shape1 <- addBoxShape space body1 100 100 0
+          shape1 <- addBoxShape body1 (V2 100 100) 0
           shape1.friction $= 0.3
 
           body2 <- addDynamicBody space 1 (1 / 0)
           body2.position $= V2 350 500
-          shape2 <- addBoxShape space body2 100 100 0
+          shape2 <- addBoxShape body2 (V2 100 100) 0
           shape2.friction $= 0.3
 
           static <- get space.staticBody
           static.position $= V2 300 50
-          ground <- addBoxShape space static 600 100 0
+          ground <- addBoxShape static (V2 600 100) 0
           ground.friction $= 0.5
 
           pure (body1, body2)
@@ -36,7 +36,7 @@ main = reactimate $ setupGame (GameConfig "Physics example" defaultWindow 60) $ 
           >>> render
           >>> renderGame gameEnv
           >>> bool Nothing (Just ())
-          <$> sampleBehavior (shouldQuit gameEnv)
+          <$> sampleBehavior (gameShouldQuit gameEnv)
 
 render :: Signal (V2 Double, V2 Double) (Camera, Picture)
 render =

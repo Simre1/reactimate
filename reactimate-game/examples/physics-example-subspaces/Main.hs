@@ -17,7 +17,7 @@ main = reactimate $ setupGame (GameConfig "Physics example" defaultWindow 60) $ 
         >>> render
         >>> renderGame gameEnv
         >>> bool Nothing (Just ())
-        <$> sampleBehavior (shouldQuit gameEnv)
+        <$> sampleBehavior (gameShouldQuit gameEnv)
 
 render :: Signal (V2 Double, V2 Double) (Camera, Picture)
 render =

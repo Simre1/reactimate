@@ -3,17 +3,18 @@
 module Main where
 
 import Control.Arrow
+import Data.Bool (bool)
+import Data.Colour.Names
 import Data.Vector.Storable qualified as VS
 import Reactimate
 import Reactimate.Game
 import Reactimate.Stateful (sumUp)
-import Data.Colour.Names
 
 main :: IO ()
 main =
   reactimate $
     setupGame (GameConfig "Basic Example" defaultWindow 60) $ \gameEnv ->
-        game >>> renderGame gameEnv >>> constant Nothing
+      game >>> renderGame gameEnv >>> bool Nothing (Just ()) <$> sampleBehavior (gameShouldQuit gameEnv)
 
 game :: Signal () (Camera, Picture)
 game = constant 1 >>> sumUp >>> arr (\x -> (camera, shapes x))

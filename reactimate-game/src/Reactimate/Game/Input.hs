@@ -3,7 +3,7 @@ module Reactimate.Game.Input
     keyboardState,
     mousePosition,
     mouseButtons,
-    shouldQuit
+    gameShouldQuit
   )
 where
 
@@ -39,8 +39,8 @@ mouseButtons _ = makeBehavior $ arrIO $ const $ do
   SDL.getMouseButtons
 
 -- | Checks if a SDL Quit event was triggered
-shouldQuit :: GameEnv -> Behavior Bool
-shouldQuit gameEnv =
+gameShouldQuit :: GameEnv -> Behavior Bool
+gameShouldQuit gameEnv =
   makeBehavior $
     accumulateEvent (||) False $
       (== SDL.QuitEvent) . SDL.eventPayload <$> inputEvents gameEnv

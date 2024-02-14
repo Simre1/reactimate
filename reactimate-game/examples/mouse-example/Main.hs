@@ -1,14 +1,20 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+import Data.Bool (bool)
+import Data.Colour.Names
 import Data.Vector.Storable qualified as VS
 import Reactimate
 import Reactimate.Game
-import Data.Colour.Names
 
 main :: IO ()
 main = reactimate $ setupGame (GameConfig "Mouse example" defaultWindow 60) $ \gameEnv ->
-  constant camera >>> mousePosition gameEnv >>> game >>> renderGame gameEnv >>> constant Nothing
+  constant camera
+    >>> mousePosition gameEnv
+    >>> game
+    >>> renderGame gameEnv
+    >>> bool Nothing (Just ())
+    <$> sampleBehavior (gameShouldQuit gameEnv)
 
 camera :: Camera
 camera = Camera (V2 0 0) (V2 800 600)
