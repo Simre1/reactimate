@@ -2,7 +2,8 @@ module Reactimate.Game.Input
   ( inputEvents,
     keyboardState,
     mousePosition,
-    mouseButtons
+    mouseButtons,
+    shouldQuit
   )
 where
 
@@ -12,7 +13,7 @@ import Reactimate.Game.Environment (GameEnv (..))
 import Reactimate.Game.Graphics (Camera (..))
 import SDL qualified
 
--- | Handle SDL events as they happen. This can be useful if you want to catch events which happen in between simulations. 
+-- | Handle SDL events as they happen. This can be useful if you want to catch events which happen in between simulations.
 inputEvents :: GameEnv -> Event SDL.Event
 inputEvents _ = callback $ \fin fire -> do
   eventWatch <- SDL.addEventWatch fire
@@ -36,3 +37,11 @@ mousePosition gameEnv = arrIO $ \camera -> do
 mouseButtons :: GameEnv -> Behavior (SDL.MouseButton -> Bool)
 mouseButtons _ = makeBehavior $ arrIO $ const $ do
   SDL.getMouseButtons
+
+-- | Checks if a SDL Quit event was triggered
+shouldQuit :: GameEnv -> Behavior Bool
+shouldQuit gameEnv =
+  makeBehavior $
+    accumulateEvent (||) False $
+      (== SDL.QuitEvent) . SDL.eventPayload <$> inputEvents gameEnv
+

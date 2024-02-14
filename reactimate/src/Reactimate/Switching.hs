@@ -32,8 +32,8 @@ manyCaseSignal (Signal makeDecider) makeSignal = Signal $ \fin -> do
     step a
 {-# INLINE manyCaseSignal #-}
 
--- | Switch out a signal function with another when you produce a @Just c@ value.
--- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.  
+-- | Switch out a signal function with another when you produce a @Just c@ value once.
+-- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.
 switch :: Signal a (b, Maybe c) -> (c -> Signal a b) -> Signal a b
 switch signal kont = Signal $ \fin -> mdo
   newFin <- newFinalizer
@@ -49,4 +49,31 @@ switch signal kont = Signal $ \fin -> mdo
         runFinalizer newFin
         newStep a
 
-  readIORef stepRef
+  pure $ \a -> do
+    step <- readIORef stepRef
+    step a
+
+-- | Switch out a signal function with another when you produce a @Just c@ value continously.
+-- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.
+-- 
+-- `switchRepeadetly` is more efficient than `switch` if you switch often.
+switchRepeadetly :: Signal a (b, Maybe c) -> (c -> Signal a (b, Maybe c)) -> Signal a b
+switchRepeadetly signal kont = Signal $ \_ -> mdo
+  let switchingF fin step a = do
+        (b, maybeC) <- step a
+        case maybeC of
+          Nothing -> pure b
+          Just c -> do
+            newFin <- newFinalizer
+            newStep <- unSignal (kont c) newFin
+            writeIORef stepRef (switchingF newFin newStep)
+            runFinalizer fin
+            switchingF newFin newStep a
+
+  newFin <- newFinalizer
+  f <- unSignal signal newFin
+  stepRef <- newIORef (switchingF newFin f)
+
+  pure $ \a -> do
+    step <- readIORef stepRef
+    step a
