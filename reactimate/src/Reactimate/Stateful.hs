@@ -43,7 +43,7 @@ feedbackLazyState initial (Signal signal) = Signal $ \fin -> do
 
 -- | Scan along time. The first function will be run each execution with the input @a@, produce the output @b@ and reuse @b@ as state for the next iteration.
 scan :: (b -> a -> b) -> b -> Signal a b
-scan f initial = feedbackState initial (arr2 (flip f) >>> dup)
+scan f initial = feedback initial (arr2 (flip f))
 {-# INLINE scan #-}
 
 -- | Sums up the input values

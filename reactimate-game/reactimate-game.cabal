@@ -100,10 +100,18 @@ executable physics-example
         reactimate,
         reactimate-game
 
-executable physics-example-subspaces
+executable physics-subspaces-example
     import: common
     main-is: Main.hs
-    hs-source-dirs: examples/physics-example-subspaces
+    hs-source-dirs: examples/physics-subspaces-example
+    build-depends:
+        reactimate,
+        reactimate-game
+
+executable physics-collision-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/physics-collision-example
     build-depends:
         reactimate,
         reactimate-game
