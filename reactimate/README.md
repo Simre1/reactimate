@@ -49,7 +49,7 @@ sum = feedback 0 $ arr \(input, acc) -> input + acc
 `feedback` takes some initial state and then accumulates this state over simulations. The state from the last execution is fed back as input. The `sum` signal produces the sum of all its inputs by keeping track of the last output.
 
 
-### Experimental Pull-based FRP
+### Experimental Pull-Push-based FRP
 
 Conventional AFRP evaluates at a set frequency in time. If events happen in-between two evaluations, they can only be processed in the next evaluation.
 Therefore, it is not possible to do something in the exact moment the event occurs.
