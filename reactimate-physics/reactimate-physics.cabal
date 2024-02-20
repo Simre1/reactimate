@@ -12,7 +12,6 @@ category:           Game
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
 -- extra-source-files:
-data-files: shaders
 
 common common
     ghc-options: -Wall
