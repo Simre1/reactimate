@@ -51,6 +51,7 @@ renderGame :: GameEnv -> Signal (Camera, Picture) ()
 renderGame gameEnv =
   arrIO $
     uncurry (renderScreen gameEnv.window gameEnv.renderer)
+
 {-# INLINE renderPicture #-}
 
 -- | A `Picture` is a collection of `PictureAtoms`. `Picture` implements `Semigroup`,
@@ -224,7 +225,8 @@ data Image = Image
 
 instance Asset ImagePath where
   type AssetValue ImagePath = Image
-  loadAsset (ImagePath renderer path) = do
+  type AssetEnv ImagePath = ()
+  loadAsset () (ImagePath renderer path) = do
     texture <- SDL.loadTexture renderer $ unpack path
     textureInfo <- SDL.queryTexture texture
     pure $ Image texture $ fromIntegral <$> V2 textureInfo.textureWidth textureInfo.textureHeight
@@ -233,7 +235,7 @@ instance Asset ImagePath where
 
 -- | Load an image from the given path during the setup phase such that you can use it for rendering
 withImage :: GameEnv -> Text -> (Image -> Signal a b) -> Signal a b
-withImage gameEnv path = withAsset gameEnv.assets (ImagePath gameEnv.renderer path)
+withImage gameEnv path = withAsset gameEnv.assets () (ImagePath gameEnv.renderer path)
 
 -- | `PictureAtoms` are stored in a spatial map. `boundingBoxSize` is the
 -- size of each quadrant.

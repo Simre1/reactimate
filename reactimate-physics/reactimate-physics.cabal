@@ -1,0 +1,68 @@
+cabal-version:      3.0
+name:               reactimate-physics
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Simre1
+maintainer:         simre4775@gmail.com
+-- copyright:
+category:           Game
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+data-files: shaders
+
+common common
+    ghc-options: -Wall
+    default-language: GHC2021
+    default-extensions:
+        OverloadedRecordDot
+        DuplicateRecordFields
+        LambdaCase
+    build-depends:    
+        base ^>=4.17.2.1,
+        vector,
+        linear,
+        text,
+        colour,
+        reactimate,
+        containers
+
+library
+    import:           common
+    exposed-modules:  
+        Reactimate.Physics2D
+        
+    hs-source-dirs:   src
+    build-depends:
+        chiphunk,
+        StateVar,
+        hashable
+
+executable basic-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/basic-example
+    build-depends:
+        reactimate-game,
+        reactimate-physics
+
+executable subspaces-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/subspaces-example
+    build-depends:
+        reactimate-game,
+        reactimate-physics
+
+
+executable collision-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/collision-example
+    build-depends:
+        reactimate-game,
+        reactimate-physics
+

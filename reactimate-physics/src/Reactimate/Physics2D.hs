@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 
-module Reactimate.Game.Physics2D
+-- This module wraps functionality from the [chiphunk](https://hackage.haskell.org/package/chiphunk) library which uses the [chipmunk](https://chipmunk-physics.net/) physics library.
+module Reactimate.Physics2D
   ( withPhysics,
 
     -- * Space
@@ -80,6 +81,7 @@ module Reactimate.Game.Physics2D
     constraintMaxBias,
     constraintCollideBodies,
     constraintImpulse,
+    removeConstraint,
 
     -- ** Pin Joint
     PinJoint,
@@ -189,6 +191,7 @@ module Reactimate.Game.Physics2D
 
     -- *** Safely change objects
     schedulePostStepWork,
+    alwaysSchedulePostStepWork,
 
     -- *** Invoke more general handlers
     handleWildcardBeginA,
@@ -315,6 +318,7 @@ instance HasField "staticBody" Space (GettableStateVar Body) where
   getField = C.spaceStaticBody
 
 -- | A `Subspace` is a part of a `Space` and can be used to manage groups of bodies.
+-- If a `Subspace` is switched out, all its `Body`s are removed. 
 data Subspace = Subspace
   { space :: Space,
     bodies :: StablePtr (IORef (S.Set Body))
@@ -483,26 +487,57 @@ momentForPoly ::
   Double
 momentForPoly mass vertices offset = C.momentForPoly mass (fmap v2ToVect vertices) (v2ToVect offset)
 
+-- | Convert from body local coordinates to world space coordinates
 bodyLocalToWorld :: Body -> V2 Double -> IO (V2 Double)
 bodyLocalToWorld body local = vectToV2 <$> C.bodyLocalToWorld body (v2ToVect local)
 
+-- | Convert from world space coordinates to body local coordinates.
 bodyWorldToLocal :: Body -> V2 Double -> IO (V2 Double)
 bodyWorldToLocal body world = vectToV2 <$> C.bodyWorldToLocal body (v2ToVect world)
 
+-- | Absolute velocity of the rigid body at the given world point.
 bodyVelocityAtWorldPoint :: Body -> V2 Double -> IO (V2 Double)
 bodyVelocityAtWorldPoint body world = vectToV2 <$> C.bodyVelocityAtWorldPoint body (v2ToVect world)
 
-bodyApplyForceAtWorldPoint :: Body -> V2 Double -> V2 Double -> IO ()
-bodyApplyForceAtWorldPoint body force local = C.bodyApplyForceAtWorldPoint body (v2ToVect force) (v2ToVect local)
+-- | Add the force to body as if applied from the world point.
+bodyApplyForceAtWorldPoint ::
+  Body ->
+  -- | force
+  V2 Double ->
+  -- | point
+  V2 Double ->
+  IO ()
+bodyApplyForceAtWorldPoint body force point = C.bodyApplyForceAtWorldPoint body (v2ToVect force) (v2ToVect point)
 
-bodyApplyForceAtLocalPoint :: Body -> V2 Double -> V2 Double -> IO ()
-bodyApplyForceAtLocalPoint body force world = C.bodyApplyForceAtLocalPoint body (v2ToVect force) (v2ToVect world)
+-- | Add the local force to body as if applied from the body local point.
+bodyApplyForceAtLocalPoint ::
+  Body ->
+  -- | force
+  V2 Double ->
+  -- | point
+  V2 Double ->
+  IO ()
+bodyApplyForceAtLocalPoint body force point = C.bodyApplyForceAtLocalPoint body (v2ToVect force) (v2ToVect point)
 
-bodyApplyImpulseAtWorldPoint :: Body -> V2 Double -> V2 Double -> IO ()
-bodyApplyImpulseAtWorldPoint body impulse local = C.bodyApplyImpulseAtWorldPoint body (v2ToVect impulse) (v2ToVect local)
+-- | Add the impulse to body as if applied from the world point.
+bodyApplyImpulseAtWorldPoint ::
+  Body ->
+  -- | impulse
+  V2 Double ->
+  -- | point
+  V2 Double ->
+  IO ()
+bodyApplyImpulseAtWorldPoint body impulse point = C.bodyApplyImpulseAtWorldPoint body (v2ToVect impulse) (v2ToVect point)
 
-bodyApplyImpulseAtLocalPoint :: Body -> V2 Double -> V2 Double -> IO ()
-bodyApplyImpulseAtLocalPoint body impulse world = C.bodyApplyImpulseAtLocalPoint body (v2ToVect impulse) (v2ToVect world)
+-- | Add the local impulse to body as if applied from the body local point.
+bodyApplyImpulseAtLocalPoint ::
+  Body ->
+  -- | impulse
+  V2 Double ->
+  -- | point
+  V2 Double ->
+  IO ()
+bodyApplyImpulseAtLocalPoint body impulse point = C.bodyApplyImpulseAtLocalPoint body (v2ToVect impulse) (v2ToVect point)
 
 instance HasField "position" Body (StateVar (V2 Double)) where
   getField = bodyPosition
@@ -526,7 +561,6 @@ instance HasField "torque" Body (StateVar Double) where
   getField = C.bodyTorque
 
 -- SHAPES
-
 addCircleShape ::
   Body ->
   -- | Radius
@@ -558,7 +592,7 @@ addSegmentShape ::
   Body ->
   -- | Start point
   V2 Double ->
-  -- | Etart point
+  -- | End point
   V2 Double ->
   -- | Thickness
   Double ->
@@ -571,7 +605,7 @@ addSegmentShape body start end thickness = do
 
 addPolyShape ::
   Body ->
-  -- | Vertices
+  -- | Vertices local to body
   [V2 Double] ->
   IO Shape
 addPolyShape body vects = do
@@ -580,6 +614,7 @@ addPolyShape body vects = do
   C.spaceAddShape space shape
   pure shape
 
+-- | Remove a shape from its 'Body'
 removeShape :: Shape -> IO ()
 removeShape shape = do
   space <- get (C.shapeSpace shape)
@@ -628,27 +663,46 @@ class IsConstraint c where
 instance IsConstraint C.Constraint where
   getConstraint = id
 
+-- | The first body constraint is attached to
 constraintBodyA :: (IsConstraint c) => c -> GettableStateVar Body
 constraintBodyA = C.constraintBodyA . getConstraint
 
+-- | The second body constraint is attached to
 constraintBodyB :: (IsConstraint c) => c -> GettableStateVar Body
 constraintBodyB = C.constraintBodyB . getConstraint
 
+-- | The maximum force that the constraint can use to act on the two bodies. Defaults to INFINITY.
 constraintMaxForce :: (IsConstraint c) => c -> StateVar Double
 constraintMaxForce = C.constraintMaxForce . getConstraint
 
+-- | The percentage of joint error that remains unfixed after a second. This works exactly the same as the collision bias property of a space, but applies to fixing error (stretching) of joints instead of overlapping collisions.
 constraintErrorBias :: (IsConstraint c) => c -> StateVar Double
 constraintErrorBias = C.constraintErrorBias . getConstraint
 
+-- | Get the maximum speed at which the constraint can apply error correction. Defaults to INFINITY.
 constraintMaxBias :: (IsConstraint c) => c -> StateVar Double
 constraintMaxBias = C.constraintMaxBias . getConstraint
 
+-- | Constraints can be used for filtering collisions too. When two bodies collide, Chipmunk ignores the collisions if this property is set to False on any constraint that connects the two bodies. Defaults to True.
+--
+-- This can be used to create a chain that self collides, but adjacent links in the chain do not collide.
 constraintCollideBodies :: (IsConstraint c) => c -> StateVar Bool
 constraintCollideBodies = C.constraintCollideBodies . getConstraint
 
+-- | The most recent impulse that constraint applied. To convert this to a force, divide by the timestep passed to spaceStep. You can use this to implement breakable joints to check if the force they attempted to apply exceeded a certain threshold.
 constraintImpulse :: (IsConstraint c) => c -> GettableStateVar Double
 constraintImpulse = C.constraintImpulse . getConstraint
 
+-- | Remove a constraint from its bodies
+removeConstraint :: (IsConstraint c) => c -> IO ()
+removeConstraint c = do
+  let constraint = getConstraint c
+  space <- C.constraintSpace constraint
+  C.spaceRemoveConstraint space constraint
+  C.constraintFree constraint
+
+-- | Connect two bodies via anchor points on those bodies. The distance between the two anchor points is measured when the joint is created.
+-- If you want to set a specific distance, use the setter function to override it
 newtype PinJoint = PinJoint C.Constraint
 
 instance IsConstraint PinJoint where
@@ -675,7 +729,16 @@ instance HasField "collideBodies" PinJoint (StateVar Bool) where
 instance HasField "impulse" PinJoint (GettableStateVar Double) where
   getField = constraintImpulse
 
-addPinJoint :: Body -> V2 Double -> Body -> V2 Double -> IO PinJoint
+addPinJoint ::
+  -- | body 1
+  Body ->
+  -- | anchor 1
+  V2 Double ->
+  -- | body 2
+  Body ->
+  -- | anchor 2
+  V2 Double ->
+  IO PinJoint
 addPinJoint body1 anchor1 body2 anchor2 = do
   pinJoint <- C.pinJointNew body1 body2 (v2ToVect anchor1) (v2ToVect anchor2)
   space <- get (C.bodySpace body1)
@@ -700,6 +763,7 @@ instance HasField "anchorB" PinJoint (StateVar (V2 Double)) where
 instance HasField "distance" PinJoint (StateVar Double) where
   getField = pinJointDistance
 
+-- | Connect two bodies via anchor points forcing distance to remain in range.
 newtype SlideJoint = SlideJoint C.Constraint
 
 instance IsConstraint SlideJoint where
@@ -726,7 +790,20 @@ instance HasField "collideBodies" SlideJoint (StateVar Bool) where
 instance HasField "impulse" SlideJoint (GettableStateVar Double) where
   getField = constraintImpulse
 
-addSlideJoint :: Body -> V2 Double -> Body -> V2 Double -> Double -> Double -> IO SlideJoint
+addSlideJoint ::
+  -- | body 1
+  Body ->
+  -- | anchor 1
+  V2 Double ->
+  -- | body 2
+  Body ->
+  -- | anchor 2
+  V2 Double ->
+  -- | minimum distance
+  Double ->
+  -- | maximum distance
+  Double ->
+  IO SlideJoint
 addSlideJoint body1 anchor1 body2 anchor2 minDistance maxDistance = do
   slideJoint <- C.slideJointNew body1 body2 (v2ToVect anchor1) (v2ToVect anchor2) minDistance maxDistance
   space <- get (C.bodySpace body1)
@@ -783,7 +860,16 @@ instance HasField "collideBodies" PivotJoint (StateVar Bool) where
 instance HasField "impulse" PivotJoint (GettableStateVar Double) where
   getField = constraintImpulse
 
-addPivotJoint :: Body -> V2 Double -> Body -> V2 Double -> IO PivotJoint
+addPivotJoint ::
+  -- | body 1
+  Body ->
+  -- | anchor 1
+  V2 Double ->
+  -- | body 2
+  Body ->
+  -- | anchor 2
+  V2 Double ->
+  IO PivotJoint
 addPivotJoint body1 anchor1 body2 anchor2 = do
   pivotJoint <- C.pivotJointNew2 body1 body2 (v2ToVect anchor1) (v2ToVect anchor2)
   space <- get (C.bodySpace body1)
@@ -802,6 +888,7 @@ instance HasField "anchorA" PivotJoint (StateVar (V2 Double)) where
 instance HasField "anchorB" PivotJoint (StateVar (V2 Double)) where
   getField = pivotJointAnchorB
 
+-- | Pivot is attached to groove on first body and to anchor on the second. All coordinates are body local.
 newtype GrooveJoint = GrooveJoint C.Constraint
 
 instance IsConstraint GrooveJoint where
@@ -828,8 +915,19 @@ instance HasField "collideBodies" GrooveJoint (StateVar Bool) where
 instance HasField "impulse" GrooveJoint (GettableStateVar Double) where
   getField = constraintImpulse
 
-addGrooveJoint :: Body -> V2 Double -> Body -> V2 Double -> V2 Double -> IO GrooveJoint
-addGrooveJoint body1 endpoint1 body2 endpoint2 anchor = do
+addGrooveJoint ::
+  -- | body 1
+  Body ->
+  -- | endpoint 1 on body 1
+  V2 Double ->
+  -- | endpoint 2 on body 1
+  V2 Double ->
+  -- | body 2
+  Body ->
+  -- | anchor on body 2
+  V2 Double ->
+  IO GrooveJoint
+addGrooveJoint body1 endpoint1 endpoint2 body2 anchor = do
   grooveJoint <- C.grooveJointNew body1 body2 (v2ToVect endpoint1) (v2ToVect endpoint2) (v2ToVect anchor)
   space <- get (C.bodySpace body1)
   C.spaceAddConstraint space grooveJoint
@@ -879,7 +977,22 @@ instance HasField "collideBodies" DampedSpring (StateVar Bool) where
 instance HasField "impulse" DampedSpring (GettableStateVar Double) where
   getField = constraintImpulse
 
-addDampedSpring :: Body -> V2 Double -> Body -> V2 Double -> Double -> Double -> Double -> IO DampedSpring
+addDampedSpring ::
+  -- | body 1
+  Body ->
+  -- | anchor 1
+  V2 Double ->
+  -- | body 2
+  Body ->
+  -- | anchor 2
+  V2 Double ->
+  -- | distance of spring
+  Double ->
+  -- | spring constant
+  Double ->
+  -- | spring damping
+  Double ->
+  IO DampedSpring
 addDampedSpring body1 anchor1 body2 anchor2 distance springConstant damping = do
   dampedSpring <- C.dampedSpringNew body1 body2 (v2ToVect anchor1) (v2ToVect anchor2) distance springConstant damping
   space <- get (C.bodySpace body1)
@@ -942,9 +1055,20 @@ instance HasField "collideBodies" DampedRotarySpring (StateVar Bool) where
 instance HasField "impulse" DampedRotarySpring (GettableStateVar Double) where
   getField = constraintImpulse
 
-addDampedRotarySpring :: Body -> Body -> Double -> Double -> Double -> IO DampedRotarySpring
-addDampedRotarySpring body1 body2 distance springConstant damping = do
-  dampedRotarySpring <- C.dampedRotarySpringNew body1 body2 distance springConstant damping
+addDampedRotarySpring ::
+  -- | body 1
+  Body ->
+  -- | body 2
+  Body ->
+  -- | angle of the spring
+  Double ->
+  -- | spring constant
+  Double ->
+  -- | damping
+  Double ->
+  IO DampedRotarySpring
+addDampedRotarySpring body1 body2 angle springConstant damping = do
+  dampedRotarySpring <- C.dampedRotarySpringNew body1 body2 angle springConstant damping
   space <- get (C.bodySpace body1)
   C.spaceAddConstraint space dampedRotarySpring
   pure $ DampedRotarySpring dampedRotarySpring
@@ -967,6 +1091,7 @@ instance HasField "stiffness" DampedRotarySpring (StateVar Double) where
 instance HasField "damping" DampedRotarySpring (StateVar Double) where
   getField = dampedRotarySpringDamping
 
+-- | Constrains the relative rotations of two bodies. It is implemented so that it’s possible to for the range to be greater than a full revolution.
 newtype RotaryLimitJoint = RotaryLimitJoint C.Constraint
 
 instance IsConstraint RotaryLimitJoint where
@@ -993,7 +1118,16 @@ instance HasField "collideBodies" RotaryLimitJoint (StateVar Bool) where
 instance HasField "impulse" RotaryLimitJoint (GettableStateVar Double) where
   getField = constraintImpulse
 
-addRotaryLimitJoint :: Body -> Body -> Double -> Double -> IO RotaryLimitJoint
+addRotaryLimitJoint ::
+  -- | body 1
+  Body ->
+  -- body 2
+  Body ->
+  -- | minimum angle
+  Double ->
+  -- | maximum angle
+  Double ->
+  IO RotaryLimitJoint
 addRotaryLimitJoint body1 body2 minAngle maxAngle = do
   rotaryLimitJoint <- C.rotaryLimitJointNew body1 body2 minAngle maxAngle
   space <- get (C.bodySpace body1)
@@ -1012,6 +1146,7 @@ instance HasField "min" RotaryLimitJoint (StateVar Double) where
 instance HasField "max" RotaryLimitJoint (StateVar Double) where
   getField = rotaryLimitJointMax
 
+-- | Works like a socket wrench.
 newtype RatchetJoint = RatchetJoint C.Constraint
 
 instance IsConstraint RatchetJoint where
@@ -1038,7 +1173,16 @@ instance HasField "collideBodies" RatchetJoint (StateVar Bool) where
 instance HasField "impulse" RatchetJoint (GettableStateVar Double) where
   getField = constraintImpulse
 
-addRatchetJoint :: Body -> Body -> Double -> Double -> IO RatchetJoint
+addRatchetJoint ::
+  -- | body 1
+  Body ->
+  -- | body 2
+  Body ->
+  -- | The initial offset to use when deciding where the ratchet angles are
+  Double ->
+  -- | The distance between “clicks”
+  Double ->
+  IO RatchetJoint
 addRatchetJoint body1 body2 minAngle maxAngle = do
   ratchetJoint <- C.ratchetJointNew body1 body2 minAngle maxAngle
   space <- get (C.bodySpace body1)
@@ -1063,6 +1207,7 @@ instance HasField "phase" RatchetJoint (StateVar Double) where
 instance HasField "ratchet" RatchetJoint (StateVar Double) where
   getField = ratchetJointRatchet
 
+-- | Keeps the angular velocity ratio of a pair of bodies constant.
 newtype GearJoint = GearJoint C.Constraint
 
 instance IsConstraint GearJoint where
@@ -1089,7 +1234,16 @@ instance HasField "collideBodies" GearJoint (StateVar Bool) where
 instance HasField "impulse" GearJoint (GettableStateVar Double) where
   getField = constraintImpulse
 
-addGearJoint :: Body -> Body -> Double -> Double -> IO GearJoint
+addGearJoint ::
+  -- | body 1
+  Body ->
+  -- | body 2
+  Body ->
+  -- | initial angular offset
+  Double ->
+  -- | ratio
+  Double ->
+  IO GearJoint
 addGearJoint body1 body2 offset ratio = do
   gearJoint <- C.gearJointNew body1 body2 offset ratio
   space <- get (C.bodySpace body1)
@@ -1108,6 +1262,7 @@ instance HasField "phase" GearJoint (StateVar Double) where
 instance HasField "ratio" GearJoint (StateVar Double) where
   getField = gearJointRatio
 
+-- | Keeps the relative angular velocity of a pair of bodies constant. You will usually want to set an force (torque) maximum for motors as otherwise they will be able to apply a nearly infinite torque to keep the bodies moving.
 newtype SimpleMotor = SimpleMotor C.Constraint
 
 instance IsConstraint SimpleMotor where
@@ -1134,7 +1289,14 @@ instance HasField "collideBodies" SimpleMotor (StateVar Bool) where
 instance HasField "impulse" SimpleMotor (GettableStateVar Double) where
   getField = constraintImpulse
 
-addSimpleMotor :: Body -> Body -> Double -> IO SimpleMotor
+addSimpleMotor ::
+  -- | body 1
+  Body ->
+  -- | body 2
+  Body ->
+  -- | relative angular velocity
+  Double ->
+  IO SimpleMotor
 addSimpleMotor body1 body2 angularVelocity = do
   simpleMotor <- C.simpleMotorNew body1 body2 angularVelocity
   space <- get (C.bodySpace body1)
@@ -1149,8 +1311,10 @@ instance HasField "rate" SimpleMotor (StateVar Double) where
 
 -- Collisions
 
+-- | A 'Collision' happens when two shapes touch
 newtype Collision = Collision C.Arbiter
 
+-- | For a `ModifiableCollision`, friction, restitution and surface velocity may be changed
 newtype ModifiableCollision = ModifiableCollision C.Arbiter
 
 collisionRestitution :: Collision -> GettableStateVar Double
@@ -1312,6 +1476,11 @@ instance IsCollision Collision where
 instance IsCollision ModifiableCollision where
   getArbiter (ModifiableCollision collision) = collision
 
+-- | Schedule an action to be done after the physics update is done.
+-- This is useful since you may not add to/remove from the space during a collision callback
+--
+-- `schedulePostStepWork` will only schedule one action for each shape pair and returns `False` if this collision already was given to `schedulePostStepWork`.
+--  Use `alwaysSchedulePostStepWork` if you do not want this.
 schedulePostStepWork :: (IsCollision collision) => CollisionSpace -> collision -> (Space -> IO ()) -> IO Bool
 schedulePostStepWork (CollisionSpace space) collision action = do
   let arbiter = getArbiter collision
@@ -1319,6 +1488,16 @@ schedulePostStepWork (CollisionSpace space) collision action = do
   let key = hash shape1 * hash shape2
   addKeyedCallback space key (action space)
 
+-- | Schedule an action to be done after the physics update is done.
+-- This is useful since you may not add to/remove from the space during a collision callback
+--
+-- `alwaysSchedulePostStepWork ` might schedule an action twice, once for collision (shapeA, shapeB) and once for collision (shapeB, shapeA).
+-- Use `schedulePostStepWork` if you want to avoid this.
+alwaysSchedulePostStepWork :: CollisionSpace -> (Space -> IO ()) -> IO ()
+alwaysSchedulePostStepWork (CollisionSpace space) action = do
+  addCallback space (action space)
+
+-- | Keeps track of the changes you want to apply to a collision handler
 data ModifyCollisionHandler a = ModifyCollisionHandler
   { collisionTypes :: !(C.CollisionType -> C.CollisionType -> (C.CollisionType, C.CollisionType)),
     begin :: !(Maybe (Collision -> CollisionSpace -> IO (Bool, Maybe a))),
@@ -1327,6 +1506,7 @@ data ModifyCollisionHandler a = ModifyCollisionHandler
     separate :: !(Maybe (Collision -> CollisionSpace -> IO (Maybe a)))
   }
 
+-- | Does not change the collision handler
 idCollisionHandler :: ModifyCollisionHandler a
 idCollisionHandler =
   ModifyCollisionHandler
@@ -1337,42 +1517,59 @@ idCollisionHandler =
       separate = Nothing
     }
 
+-- | Change the behavior of a collision handler between two collision types.
+--
+-- Also returns an `Event` which triggers whenever the handlers in `ModifyCollisionHandler` trigger one.
 modifyCollisionHandler :: Space -> C.CollisionType -> C.CollisionType -> ModifyCollisionHandler a -> IO (Event a)
 modifyCollisionHandler space typeA typeB mch = do
   handlerPtr <- C.spaceAddCollisionHandler space typeA typeB
   modifyCollisionHandlerPtr handlerPtr mch
 
+-- | Change the behavior of a wildcard collision handler
+--
+-- Also returns an `Event` which triggers whenever the handlers in `ModifyCollisionHandler` trigger one.
 modifyWildcardCollisionHandler :: Space -> C.CollisionType -> ModifyCollisionHandler a -> IO (Event a)
 modifyWildcardCollisionHandler space typeA mch = do
   handlerPtr <- C.spaceAddWildcardHandler space typeA
   modifyCollisionHandlerPtr handlerPtr mch
 
+-- | Change the behavior of the default collision handler
+--
+-- Also returns an `Event` which triggers whenever the handlers in `ModifyCollisionHandler` trigger one.
 modifyDefaultCollisionHandler :: Space -> ModifyCollisionHandler a -> IO (Event a)
 modifyDefaultCollisionHandler space mch = do
   handlerPtr <- C.spaceAddDefaultCollisionHandler space
   modifyCollisionHandlerPtr handlerPtr mch
 
+-- | Use the wildcard begin wildcard handler for shape of body A
 handleWildcardBeginA :: Collision -> CollisionSpace -> IO Bool
 handleWildcardBeginA (Collision arbiter) (CollisionSpace space) = C.arbiterCallWildcardBeginA arbiter space
 
+-- | Use the wildcard begin wildcard handler for shape of body B
 handleWildcardBeginB :: Collision -> CollisionSpace -> IO Bool
 handleWildcardBeginB (Collision arbiter) (CollisionSpace space) = C.arbiterCallWildcardBeginB arbiter space
 
+-- | Use the wildcard presolve handler for shape of body A
 handleWildcardPreSolveA :: ModifiableCollision -> CollisionSpace -> IO Bool
 handleWildcardPreSolveA (ModifiableCollision arbiter) (CollisionSpace space) = C.arbiterCallWildcardPreSolveA arbiter space
 
+-- | Use the wildcard presolve handler for shape of body B
 handleWildcardPreSolveB :: ModifiableCollision -> CollisionSpace -> IO Bool
 handleWildcardPreSolveB (ModifiableCollision arbiter) (CollisionSpace space) = C.arbiterCallWildcardPreSolveB arbiter space
 
+-- | Use the wildcard postsolve handler for shape of body A
 handleWildcardPostSolveA :: Collision -> CollisionSpace -> IO ()
 handleWildcardPostSolveA (Collision arbiter) (CollisionSpace space) = C.arbiterCallWildcardPostSolveA arbiter space
 
+-- | Use the wildcard postsolve handler for shape of body B
 handleWildcardPostSolveB :: Collision -> CollisionSpace -> IO ()
 handleWildcardPostSolveB (Collision arbiter) (CollisionSpace space) = C.arbiterCallWildcardPostSolveB arbiter space
 
+-- | Use the wildcard separate handler for shape of body A
 handleWildcardSeparateA :: Collision -> CollisionSpace -> IO ()
 handleWildcardSeparateA (Collision arbiter) (CollisionSpace space) = C.arbiterCallWildcardSeparateA arbiter space
 
+-- | Use the wildcard separate handler for shape of body B
 handleWildcardSeparateB :: Collision -> CollisionSpace -> IO ()
 handleWildcardSeparateB (Collision arbiter) (CollisionSpace space) = C.arbiterCallWildcardSeparateB arbiter space
 
@@ -1429,6 +1626,12 @@ addKeyedCallback space key action = do
      in if exists
           then (postStepCallbacks, False)
           else (postStepCallbacks {keyedCallbacks = IM.insert key action postStepCallbacks.keyedCallbacks}, True)
+
+addCallback :: Space -> IO () -> IO ()
+addCallback space action = do
+  callbacks <- get (C.spaceUserData space) >>= deRefStablePtr . castPtrToStablePtr
+  modifyIORef' callbacks $ \postStepCallbacks ->
+    postStepCallbacks {unkeyedCallbacks = postStepCallbacks.unkeyedCallbacks >> action}
 
 v2ToVect :: V2 Double -> Vect
 v2ToVect (V2 x y) = Vect x y

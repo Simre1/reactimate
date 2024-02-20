@@ -4,16 +4,15 @@ import Data.Bool (bool)
 import Data.Colour.Names (black, blue, red)
 import Data.Vector.Storable qualified as VS
 import Reactimate
+import Reactimate.Physics2D
 import Reactimate.Game
-
--- Notice that when the
 
 main :: IO ()
 main = reactimate $ setupGame (GameConfig "Physics example" defaultWindow 60) $ \gameEnv ->
   withPhysics $ \space ->
     withSetup_ (space.gravity $= V2 0 (-200)) $
       actionIO (spaceStep space (1 / 60))
-        >>> switchRepeadetly (setupFallingBodies space) (const $ setupFallingBodies space)
+        >>> switchRepeatedly (setupFallingBodies space) (const $ setupFallingBodies space)
         >>> render
         >>> renderGame gameEnv
         >>> bool Nothing (Just ())

@@ -37,7 +37,7 @@ module Reactimate
     -- * Switch signals
     caseOf,
     switch,
-    switchRepeadetly,
+    switchRepeatedly,
 
     -- * Signal Setup
     withSetup,

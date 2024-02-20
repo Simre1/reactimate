@@ -55,10 +55,10 @@ switch signal kont = Signal $ \fin -> mdo
 
 -- | Switch out a signal function with another when you produce a @Just c@ value continously.
 -- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.
--- 
--- `switchRepeadetly` is more efficient than `switch` if you switch often.
-switchRepeadetly :: Signal a (b, Maybe c) -> (c -> Signal a (b, Maybe c)) -> Signal a b
-switchRepeadetly signal kont = Signal $ \_ -> mdo
+--
+-- `switchRepeatedly` is more efficient than `switch` if you switch often.
+switchRepeatedly :: Signal a (b, Maybe c) -> (c -> Signal a (b, Maybe c)) -> Signal a b
+switchRepeatedly signal kont = Signal $ \_ -> mdo
   let switchingF fin step a = do
         (b, maybeC) <- step a
         case maybeC of

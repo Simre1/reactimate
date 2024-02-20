@@ -1,9 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+import Control.Monad (when)
 import Data.Bool (bool)
 import Data.Colour.Names (black, blue, red)
+import Data.Foldable (traverse_)
 import Data.Vector.Storable qualified as VS
 import Reactimate
+import Reactimate.Physics2D
 import Reactimate.Game
 
 main :: IO ()
@@ -28,13 +31,39 @@ main = reactimate $ setupGame (GameConfig "Physics example" defaultWindow 60) $ 
           ground <- addBoxShape static (V2 600 100) 0
           ground.friction $= 0.5
 
-          pure (body1, body2)
+          collisionEvent <-
+            modifyDefaultCollisionHandler space $
+              idCollisionHandler
+                { begin = Just $ \collision space -> do
+                    position <- collision.pointA 1
+
+                    (bodyA, bodyB) <- collision.bodies
+                    _ <- schedulePostStepWork space collision $ \space -> do
+                      when (bodyB == static) $
+                        bodyApplyImpulseAtLocalPoint bodyA (V2 0 200) (V2 0 0)
+                      when (bodyA == static) $
+                        bodyApplyImpulseAtLocalPoint bodyB (V2 0 200) (V2 0 0)
+
+                    bodies <- collision.bodies
+                    pure (True, Just bodies)
+                }
+
+          pure (body1, body2, collisionEvent)
       )
-      $ \(body1, body2) ->
+      $ \(body1, body2, collisionEvent) ->
         actionIO (spaceStep space (1 / 60))
           >>> arrIO (\_ -> (,) <$> get body1.position <*> get body2.position)
           >>> render
           >>> renderGame gameEnv
+          >>> sampleEventAsList collisionEvent
+          >>> arrIO
+            ( traverse_
+                ( \(bodyA, bodyB) -> do
+                    posA <- get bodyA.position
+                    posB <- get bodyB.position
+                    putStrLn $ "Collision with bodies at: " ++ show posA ++ ", " ++ show posB
+                )
+            )
           >>> bool Nothing (Just ())
           <$> sampleBehavior (gameShouldQuit gameEnv)
 

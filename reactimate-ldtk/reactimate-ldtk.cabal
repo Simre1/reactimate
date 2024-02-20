@@ -1,0 +1,54 @@
+cabal-version:      3.0
+name:               reactimate-ldtk
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Simre1
+maintainer:         simre4775@gmail.com
+-- copyright:
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common common
+    ghc-options: -Wall
+    default-language: GHC2021
+    default-extensions:
+        DataKinds
+        DuplicateRecordFields
+        OverloadedRecordDot
+    build-depends:
+        base ^>=4.17.2.1
+        
+
+library
+    import: common
+    exposed-modules:  
+        Reactimate.LDtk
+    hs-source-dirs:   src
+    build-depends:    
+        base ^>=4.17.2.1,
+        reactimate,
+        reactimate-game,
+        vector,
+        containers,
+        unordered-containers,
+        hashable,
+        bytestring,
+        text,
+        ldtk-types,
+        aeson,
+        transformers
+
+executable basic-example
+    import: common
+    main-is: Main.hs
+    hs-source-dirs: examples/basic-example
+    build-depends:
+        reactimate,
+        reactimate-game,
+        reactimate-ldtk,
+        vector,
+        colour
