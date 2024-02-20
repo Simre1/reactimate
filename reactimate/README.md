@@ -1,6 +1,6 @@
 # Reactimate
 
-`reactimate` is a library implementing the AFRP paradigm. In contrast to other libraries, `reactimate` uses `IO` effects to increase performance and a concrete base type to eliminate typeclass performance problems. 
+`reactimate` is a library implementing the AFRP (Arrowized Functional Reactive Programming) paradigm. In contrast to other libraries, `reactimate` uses `IO` effects to increase performance and a concrete base type to eliminate typeclass performance problems. 
 In addition, `reactimate` has some support for pull-based FRP, making it possible to deal with events which happen in-between simulation cycles.
 
 ## Signal
@@ -47,6 +47,28 @@ sum = feedback 0 $ arr \(input, acc) -> input + acc
 ```
 
 `feedback` takes some initial state and then accumulates this state over simulations. The state from the last execution is fed back as input. The `sum` signal produces the sum of all its inputs by keeping track of the last output.
+
+
+### Experimental Pull-based FRP
+
+Conventional AFRP evaluates at a set frequency in time. If events happen in-between two evaluations, they can only be processed in the next evaluation.
+Therefore, it is not possible to do something in the exact moment the event occurs.
+
+`reactimate` has support for such events which happen outside of the simulation and occur at any time.
+The idea is to evaluate the signal not at a specific frequency, but rather evaluate the signal whenever the event happens.
+
+Here is an example:
+
+```haskell
+increasingEvent :: Event ()
+increasingEvent = mapEvent (sumUp >>> arrIO print) (pulse 2 1)
+
+main :: IO ()
+main = reactimateEvent $ Nothing <$ increasingEvent
+```
+
+`pulse 2 1` emits an event with payload 1 every 2 seconds. `sumUp >>> arrIO print` sums up all inputs and prints the output.
+`sampleEvent` will wait until its given event produces a `Just` value. This never happens here, so it just runs forever. 
 
 ## Microbenchmarks
 

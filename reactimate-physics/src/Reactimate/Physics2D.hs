@@ -1618,6 +1618,7 @@ data PostStepCallbacks = PostStepCallbacks
 emptyPostStepCallbacks :: PostStepCallbacks
 emptyPostStepCallbacks = PostStepCallbacks mempty mempty
 
+-- | Add a post step callback with a key. If the key already exists, then the action will not be added and `False` is returned.
 addKeyedCallback :: Space -> Int -> IO () -> IO Bool
 addKeyedCallback space key action = do
   callbacks <- get (C.spaceUserData space) >>= deRefStablePtr . castPtrToStablePtr
@@ -1627,6 +1628,7 @@ addKeyedCallback space key action = do
           then (postStepCallbacks, False)
           else (postStepCallbacks {keyedCallbacks = IM.insert key action postStepCallbacks.keyedCallbacks}, True)
 
+-- | Add a post step callback
 addCallback :: Space -> IO () -> IO ()
 addCallback space action = do
   callbacks <- get (C.spaceUserData space) >>= deRefStablePtr . castPtrToStablePtr

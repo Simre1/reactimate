@@ -1,7 +1,10 @@
 module Reactimate.Run where
 
+import Control.Concurrent (newEmptyMVar, readMVar)
+import Control.Concurrent.MVar (putMVar)
 import Control.Monad
 import Data.IORef (modifyIORef', newIORef, readIORef)
+import Reactimate.Event
 import Reactimate.Signal
 
 -- | Run a signal function repeatedly until it produces a `Just` value.
@@ -10,7 +13,7 @@ import Reactimate.Signal
 reactimate :: Signal () (Maybe a) -> IO a
 reactimate signal =
   withFinalizer $ \fin -> do
-    f <- unSignal signal fin 
+    f <- unSignal signal fin
     let loop = do
           v <- f ()
           maybe loop pure v
@@ -25,7 +28,7 @@ sample :: Signal a b -> [a] -> IO [b]
 sample signal inputs = do
   withFinalizer
   $ \fin -> do
-    f <- unSignal signal fin 
+    f <- unSignal signal fin
     traverse f inputs
 {-# INLINE sample #-}
 
@@ -34,10 +37,21 @@ fold :: (x -> b -> x) -> x -> Signal a b -> [a] -> IO x
 fold combine initial signal inputs = do
   withFinalizer
   $ \fin -> do
-    f <- unSignal signal fin 
+    f <- unSignal signal fin
     state <- newIORef initial
     forM_ inputs $ \a -> do
       b <- f a
       modifyIORef' state (`combine` b)
     readIORef state
 {-# INLINE fold #-}
+
+reactimateEvent :: Event (Maybe a) -> IO a
+reactimateEvent (Event signal hook) =
+  withFinalizer $ \fin -> do
+    mvar <- newEmptyMVar
+    f <- unSignal signal fin
+    hook fin $ \x -> do
+      maybeA <- f x
+      maybe mempty (putMVar mvar) maybeA
+    readMVar mvar
+{-# INLINE reactimateEvent #-}
