@@ -34,11 +34,5 @@ renderLDtk filepath = withLDtkRoot filepath $ \ldtkRoot -> withLevel ldtkRoot "L
     rules = pure $ matchEntity Nothing $ do
       entitySize <- getEntitySize
       entityPosition <- getEntityPosition
-      pure $
-        makePicture 0 $
-          BasicShapes $
-            VS.singleton
-              ( ColouredShape (packColour red) $
-                  BSRectangle $
-                    Rectangle entityPosition entitySize
-              )
+      pure $ makePicture 0 $
+        drawRectangle (packColour red) $ Rectangle entityPosition entitySize

@@ -54,7 +54,8 @@ library
         text,
         filepath,
         hashtables,
-        hashable
+        hashable,
+        transformers
 
 executable basic-example
     import: common

@@ -22,12 +22,9 @@ render :: Signal (V2 Double, V2 Double) (Camera, Picture)
 render =
   arr $ \(pos1, pos2) ->
     ( Camera (V2 0 0) (V2 800 600),
-      makePicture 0 $
-        BasicShapes $
-          VS.fromList
-            [ ColouredShape (packColour red) (BSRectangle $ Rectangle (round <$> pos1 - V2 50 50) (V2 100 100)),
-              ColouredShape (packColour blue) (BSRectangle $ Rectangle (round <$> pos2 - V2 50 50) (V2 100 100))
-            ]
+      makePicture 0 $ do
+        drawRectangle (packColour red) $ Rectangle (round <$> pos1 - V2 50 50) (V2 100 100)
+        drawRectangle (packColour blue) $ Rectangle (round <$> pos2 - V2 50 50) (V2 100 100)
     )
 
 -- As `setupFallingBodies` is switched out, the corresponding `Subspace` with its bodies is also removed from the `Space`.

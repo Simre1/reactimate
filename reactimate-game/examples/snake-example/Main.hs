@@ -9,6 +9,7 @@ import Data.Vector.Storable qualified as VS
 import Reactimate
 import Reactimate.Game
 import SDL qualified
+import Control.Monad
 
 gameConfig :: GameConfig
 gameConfig =
@@ -80,9 +81,10 @@ stepGame =
               let nextDirection = adaptDirection input direction
                   nextHead = nextDirection + head snake
                   snakeEats = Just nextHead == food
-                  nextSnake = if snakeEats || length snake == 1
-                    then nextHead : snake
-                    else nextHead : init snake
+                  nextSnake =
+                    if snakeEats || length snake == 1
+                      then nextHead : snake
+                      else nextHead : init snake
                   nextFood = if snakeEats then Just rngV2 else food
                   nextScore = if snakeEats then score + 1 else score
                in if isDead nextSnake
@@ -118,13 +120,13 @@ stepGame =
 render :: GameEnv -> Signal GameState ()
 render gameEnv = arr (\gs -> (camera, gameStatePicture gs)) >>> renderGame gameEnv
   where
-    gameStatePicture (GameState snake _ food _ _) =
-      makePicture 0 (BasicShapes $ VS.fromList (zipWith snakeShape [0 ..] (toList snake)))
-        <> foldMap (makePicture 0 . (BasicShapes . VS.singleton . foodShape)) food
-    snakeShape (i' :: Int) pos =
+    gameStatePicture (GameState snake _ food _ _) = makePicture 0 $ do
+      zipWithM_ snakeShape [0 ..] snake
+      drawFood food
+    snakeShape (i' :: Int) pos = do
       let i = fromIntegral $ abs $ (i' `mod` 160) - 80
-       in ColouredShape (packColour $ sRGB24 0 (255 - i * 2) (i * 3)) $ BSRectangle (Rectangle pos (V2 1 1))
-    foodShape pos = ColouredShape (packColour red) $ BSRectangle (Rectangle pos (V2 1 1))
+      drawRectangle (packColour $ sRGB24 0 (255 - i * 2) (i * 3)) (Rectangle pos (V2 1 1))
+    drawFood = maybe mempty $ \pos -> drawRectangle (packColour red) (Rectangle pos (V2 1 1))
     camera = Camera (V2 0 0) gameBounds
 
 shouldQuit :: Signal Input (Maybe ())

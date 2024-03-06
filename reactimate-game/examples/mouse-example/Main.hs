@@ -22,8 +22,7 @@ camera = Camera (V2 0 0) (V2 800 600)
 picture :: V2 Int -> Picture
 picture pos =
   makePicture 0 $
-    BasicShapes $
-      VS.singleton (ColouredShape (packColour blue) $ BSRectangle $ Rectangle pos (V2 100 100))
+    drawRectangle (packColour blue) $ Rectangle pos (V2 100 100)
 
 game :: Signal (V2 Int) (Camera, Picture)
 game = arr $ \pos -> (camera, picture pos)

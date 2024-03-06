@@ -5,7 +5,6 @@ module Main where
 import Control.Arrow
 import Data.Bool (bool)
 import Data.Colour.Names
-import Data.Vector.Storable qualified as VS
 import Reactimate
 import Reactimate.Game
 import Reactimate.Stateful (sumUp)
@@ -17,29 +16,17 @@ main =
       game >>> renderGame gameEnv >>> bool Nothing (Just ()) <$> sampleBehavior (gameShouldQuit gameEnv)
 
 game :: Signal () (Camera, Picture)
-game = constant 1 >>> sumUp >>> arr (\x -> (camera, shapes x))
+game = constant 0.01 >>> sumUp >>> arr (\x -> (camera, shapes x))
 
-shapes :: Int -> Picture
+shapes :: Float -> Picture
 shapes x =
-  makePicture 0 $
-    BasicShapes $
-      VS.fromList
-        [ ColouredShape (packColour red) $
-            BSRectangle $
-              Rectangle (V2 xMod100 xMod360) (V2 100 100),
-          ColouredShape (packColour blue) $
-            BSEllipse $
-              Ellipse (V2 300 400) (V2 xMod100 (xMod360 `quot` 2)),
-          ColouredShape (packColour green) $
-            BSTriangle $
-              Triangle (V2 (500 + xMod360) 100) (V2 700 xMod100) (V2 (700 + xMod100) (400 + xMod360)),
-          ColouredShape (packColour yellow) $
-            BSCircularArc $
-              CircularArc (V2 350 100) 100 0 x
-        ]
-  where
-    xMod100 = abs $ x `mod` 200 - 100
-    xMod360 = abs $ x `mod` 720 - 360
+  translatePicture (V2 400 300) $
+    rotatePicture (2 * pi * x) $
+      makePicture 0 $ do
+        drawRectangle (packColour red) $
+          Rectangle (V2 (-50) (-50)) (V2 100 100)
+        drawRectangle (packColour blue) $
+          Rectangle (V2 200 (-50)) (V2 100 100)
 
 camera :: Camera
 camera = Camera (V2 0 0) (V2 800 600)

@@ -1,3 +1,5 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Reactimate.Game.Graphics
@@ -8,7 +10,13 @@ module Reactimate.Game.Graphics
     Picture,
     makePicture,
     staticPicture,
-    PictureAtoms (..),
+    translatePicture,
+    rotatePicture,
+
+    -- * Rendering
+    drawRectangle,
+    drawPolygon,
+    blitImage,
     Blit (..),
 
     -- ** Colours
@@ -24,8 +32,10 @@ module Reactimate.Game.Graphics
 where
 
 import Control.Monad
+import Data.Bifunctor (Bifunctor (..))
 import Data.Colour
 import Data.Colour.SRGB (RGB (..), toSRGB24)
+import Data.Foldable (toList)
 import Data.Hashable (Hashable (..))
 import Data.Hashable.Generic (genericHashWithSalt)
 import Data.IntMap.Strict qualified as IM
@@ -34,6 +44,7 @@ import Data.Text (Text, unpack)
 import Data.Vector.Storable qualified as VS
 import Data.Word (Word8)
 import Foreign (Storable (..))
+import Foreign.C (CInt)
 import Foreign.Ptr
 import GHC.Generics (Generic)
 import Linear.V2
@@ -41,25 +52,25 @@ import Linear.V4
 import Reactimate (Signal, arrIO, once)
 import Reactimate.Game.Assets (Asset (..), withAsset)
 import Reactimate.Game.Environment (GameEnv (..))
+import Reactimate.Game.Projection2D
 import Reactimate.Game.Shapes
 import SDL qualified
 import SDL.Image qualified as SDL
 import SDL.Primitive qualified as SDL
+import SDL.Raw.Types qualified as SDLRaw
 
 -- | Renders the given `Picture` with the `Camera` each frame.
 renderGame :: GameEnv -> Signal (Camera, Picture) ()
 renderGame gameEnv =
   arrIO $
     uncurry (renderScreen gameEnv.window gameEnv.renderer)
-
-{-# INLINE renderPicture #-}
+{-# INLINE renderGame #-}
 
 -- | A `Picture` is a collection of `PictureAtoms`. `Picture` implements `Semigroup`,
 -- so multiple `Picture`s can be combined.
 newtype Picture = Picture
   { pictureParts :: IM.IntMap PicturePart
   }
-  deriving (Eq)
 
 instance Semigroup Picture where
   (Picture objects1) <> (Picture objects2) =
@@ -71,27 +82,26 @@ instance Monoid Picture where
 
 data PicturePart
   = PicturePart
-      { position :: !(V2 Int),
-        pictureParts :: !(S.Seq PicturePart)
+      { projection :: !(Projection2D Int),
+        pictureParts :: S.Seq PicturePart
       }
-  | PicturePartAtoms
-      { pictureAtoms :: !PictureAtoms
+  | PictureRender
+      { render :: Render ()
       }
-  deriving (Eq)
 
 instance Semigroup PicturePart where
-  pp1@(PicturePart position1 parts1) <> pp2@(PicturePart position2 parts2) =
-    if position1 == position2
-      then PicturePart position1 (parts1 <> parts2)
-      else PicturePart (V2 0 0) $ S.fromList [pp1, pp2]
-  pp1 <> pp2@(PicturePartAtoms _) = pp1 <> PicturePart (V2 0 0) (S.singleton pp2)
-  pp1@(PicturePartAtoms _) <> pp2 = PicturePart (V2 0 0) (S.singleton pp1) <> pp2
+  pp1@(PicturePart movement1 parts1) <> pp2@(PicturePart movement2 parts2) =
+    if movement1 == movement2
+      then PicturePart movement1 (parts1 <> parts2)
+      else PicturePart idProjection $ S.fromList [pp1, pp2]
+  pp1 <> pp2@(PictureRender _) = pp1 <> PicturePart idProjection (S.singleton pp2)
+  pp1@(PictureRender _) <> pp2 = PicturePart idProjection (S.singleton pp1) <> pp2
 
 -- | `PictureAtoms` are the building blocks of `Picture`s.
-data PictureAtoms
-  = BasicShapes !(VS.Vector (ColouredShape BasicShape))
-  | Texture !Image !(VS.Vector Blit)
-  deriving (Eq)
+-- data PictureAtoms
+--   = BasicShapes !(VS.Vector (ColouredShape BasicShape))
+--   | Texture !Image !(VS.Vector Blit)
+--   deriving (Eq)
 
 -- | A `Blit` contains source and target rectangles. They are used to copy
 -- parts of some source texture onto a target texture. For `PictureAtoms`, the target is the screen.
@@ -110,8 +120,7 @@ instance Storable Blit where
   poke ptr (Blit r1 r2) = do
     poke (castPtr ptr) (V2 r1 r2)
 
--- | A `Camera` can move around and zoom out and in. Only objects which are
--- visible by the `Camera` are rendered.
+-- | A `Camera` can move around and zoom out and in.
 data Camera = Camera
   { position :: {-# UNPACK #-} !(V2 Int),
     viewport :: {-# UNPACK #-} !(V2 Int)
@@ -120,19 +129,14 @@ data Camera = Camera
 
 -- | Make a `Picture` from a `PictureAtoms` at the given z-level.
 -- `PictureAtoms` with higher z-level are rendered over ones with lower z-level.
-makePicture :: Int -> PictureAtoms -> Picture
-makePicture zIndex pictureAtoms =
-  Picture $ IM.singleton zIndex $ PicturePartAtoms pictureAtoms
+makePicture :: Int -> Render () -> Picture
+makePicture zIndex action =
+  Picture $ IM.singleton zIndex $ PictureRender action
 
 -- | Creates the `Picture` once and then reuses it in all subsequenct renders. If you have some static content,
 -- use this function to save some computation time.
 staticPicture :: Signal a Picture -> Signal a Picture
 staticPicture = once
-
--- | Moves points from global coordinates to screen coordinates.
-adjustPosition :: Camera -> V2 Int -> V2 Int -> V2 Int
-adjustPosition (Camera (V2 cx cy) (V2 vx vy)) (V2 wx wy) (V2 x y) =
-  V2 ((x - cx) * wx `quot` vx) (wy - ((y - cy) * wy `quot` vy))
 
 -- | Pack an `AlphaColour` so that it can be used for `PictureAtoms`. Include the /colour/ package to make colours!
 packAlphaColour :: AlphaColour Float -> V4 Word8
@@ -140,12 +144,14 @@ packAlphaColour colour =
   let (RGB r g b) = toSRGB24 (colour `over` black)
       alpha = truncate $ alphaChannel colour * 255
    in V4 r g b alpha
+{-# INLINE packAlphaColour #-}
 
 -- | Pack a `Colour` so that it can be used for `PictureAtoms`. Include the /colour/ package to make colours!
 packColour :: Colour Float -> V4 Word8
 packColour colour =
   let (RGB r g b) = toSRGB24 colour
    in V4 r g b 255
+{-# INLINE packColour #-}
 
 renderScreen :: SDL.Window -> SDL.Renderer -> Camera -> Picture -> IO ()
 renderScreen window renderer camera picture = do
@@ -153,56 +159,84 @@ renderScreen window renderer camera picture = do
 
   SDL.rendererDrawColor renderer SDL.$= V4 255 255 255 255
   SDL.clear renderer
-  renderPicture (RenderContext window renderer (fromIntegral <$> windowSize) camera) picture
+  renderPicture (RenderContext window renderer) (computeCameraProjection (fromIntegral <$> windowSize) camera) picture
   SDL.present renderer
 
 data RenderContext = RenderContext
   { window :: !SDL.Window,
-    renderer :: !SDL.Renderer,
-    renderSize :: !(V2 Int),
-    camera :: !Camera
+    renderer :: !SDL.Renderer
   }
 
-renderPicture :: RenderContext -> Picture -> IO ()
-renderPicture rc (Picture pictureParts) = forM_ pictureParts $ \picturePart -> renderPicturePart rc (V2 0 0) picturePart
+renderPicture :: RenderContext -> Projection2D Int -> Picture -> IO ()
+renderPicture rc projection (Picture pictureParts) = forM_ pictureParts $ \picturePart -> renderPicturePart rc projection picturePart
 
-renderPicturePart :: RenderContext -> V2 Int -> PicturePart -> IO ()
-renderPicturePart rc offset (PicturePart position nestedParts) = forM_ nestedParts $ renderPicturePart rc (position + offset)
-renderPicturePart rc offset (PicturePartAtoms atoms) =
-  renderAtoms rc offset atoms
+renderPicturePart :: RenderContext -> Projection2D Int -> PicturePart -> IO ()
+renderPicturePart rc projection1 (PicturePart projection2 nestedParts) = forM_ nestedParts $ renderPicturePart rc (projection1 *** projection2)
+renderPicturePart rc projection (PictureRender (Render f)) =
+  f rc projection
 
-renderAtoms :: RenderContext -> V2 Int -> PictureAtoms -> IO ()
-renderAtoms rc offset atoms = case atoms of
-  BasicShapes basicShapes -> VS.forM_ basicShapes $ \(ColouredShape colour basicShape) -> case basicShape of
-    (BSRectangle (Rectangle position size)) -> do
-      let (V2 x y) = adjustPosition rc.camera rc.renderSize (position + offset)
-          (V2 sx sy) = quot <$> size * rc.renderSize <*> rc.camera.viewport
-      SDL.fillRectangle renderer (fromIntegral <$> V2 (x + sx) (y - sy)) (fromIntegral <$> V2 x y) colour
-    (BSEllipse (Ellipse position size)) -> do
-      let pos = fromIntegral <$> adjustPosition rc.camera rc.renderSize (position + offset)
-          (V2 sx sy) = fmap fromIntegral $ quot <$> size * rc.renderSize <*> rc.camera.viewport
-      SDL.fillEllipse renderer pos sx sy colour
-    (BSTriangle (Triangle position1 position2 position3)) -> do
-      let pos1 = fromIntegral <$> adjustPosition rc.camera rc.renderSize (position1 + offset)
-          pos2 = fromIntegral <$> adjustPosition rc.camera rc.renderSize (position2 + offset)
-          pos3 = fromIntegral <$> adjustPosition rc.camera rc.renderSize (position3 + offset)
-      SDL.fillTriangle renderer pos1 pos2 pos3 colour
-    (BSCircularArc (CircularArc position radius startDegree endDegree)) -> do
-      let pos = fromIntegral <$> adjustPosition rc.camera rc.renderSize (position + offset)
-      SDL.fillPie renderer pos (fromIntegral radius) (fromIntegral startDegree) (fromIntegral endDegree) colour
-  Texture image blits -> VS.forM_ blits $ \(Blit source target) -> do
-    let (V2 _ ty) = image.size
-        (V2 spx spy) = source.position
-        (V2 _ ssy) = source.size
-        textureSource = SDL.Rectangle (fmap fromIntegral $ SDL.P $ V2 spx (ty - spy - ssy)) (fromIntegral <$> source.size)
-        (V2 tpx tpy) = adjustPosition rc.camera rc.renderSize (target.position + offset)
-        ts@(V2 _ tsy) = quot <$> target.size * rc.renderSize <*> rc.camera.viewport
-        screenTarget = SDL.Rectangle (fmap fromIntegral $ SDL.P $ V2 tpx (tpy - tsy)) (fromIntegral <$> ts)
-    SDL.copy renderer image.texture (Just textureSource) (Just screenTarget)
+-- | Draw a filled rectangle with the given colour
+drawRectangle :: V4 Word8 -> Rectangle -> Render ()
+drawRectangle (V4 r g b a) (Rectangle position (V2 sizeX sizeY)) = Render $ \rc projection ->
+  let vertices = VS.fromList $ makeVertex . fmap fromIntegral . applyProjection quot projection <$> [position, position + V2 sizeX 0, position + V2 sizeX sizeY, position + V2 0 sizeY]
+      indices = VS.fromList [0, 1, 2, 3, 2, 0]
+   in SDL.renderGeometry rc.renderer Nothing vertices indices
   where
-    renderer = rc.renderer
+    makeVertex (V2 dX dY) =
+      SDL.Vertex
+        (SDLRaw.FPoint dX dY)
+        (SDLRaw.Color r g b a)
+        (SDLRaw.FPoint 0 0)
 
--- toSDLRectangle (Rectangle position@(V2 x y) size@(V2 sx sy)) = SDL.Rectangle (SDL.P $ fromIntegral <$> V2 x (ty - y)) (fromIntegral <$> size)
+-- | Draw a filled polygon with the given colour
+drawPolygon :: V4 Word8 -> [V2 Int] -> Render ()
+drawPolygon colour vertices = Render $ \rc projection ->
+  let points = applyProjection quot projection <$> vertices
+      xs = VS.fromList $ fmap (fromIntegral . getX) points
+      ys = VS.fromList $ fmap (fromIntegral . getY) points
+   in SDL.fillPolygon rc.renderer xs ys colour
+
+-- | Blit rectangular portions of an image to the screen.
+blitImage :: [Blit] -> Image -> Render ()
+blitImage blits (Image texture (V2 iWidth iHeight)) = Render $ \rc projection ->
+  let (vertices, indices) = bimap (VS.fromList . toList) (VS.fromList . toList) $ generateGeometry projection (S.empty, S.empty) 0 blits
+   in SDL.renderGeometry rc.renderer (Just texture) vertices indices
+  where
+    generateGeometry :: Projection2D Int -> (S.Seq SDL.Vertex, S.Seq CInt) -> CInt -> [Blit] -> (S.Seq SDL.Vertex, S.Seq CInt)
+    generateGeometry _ geometry _ [] = geometry
+    generateGeometry projection (vertices, indices) n (Blit (Rectangle source (V2 sourceWidth sourceHeight)) (Rectangle dest (V2 destWidth destHeight)) : blits) =
+      let sourceVertices = fmap fromIntegral . (source +) <$> [V2 0 0, V2 sourceWidth 0, V2 0 sourceHeight, V2 sourceWidth sourceHeight]
+          destVertices = fmap fromIntegral . applyProjection quot projection . (dest +) <$> [V2 0 0, V2 destWidth 0, V2 0 destHeight, V2 destWidth destHeight]
+       in generateGeometry
+            projection
+            (vertices <> S.fromList (zipWith makeVertex sourceVertices destVertices), indices <> S.fromList ((n +) <$> [0, 1, 2, 3, 2, 1]))
+            (n + 4)
+            blits
+    makeVertex (V2 sX sY) (V2 dX dY) =
+      SDL.Vertex
+        (SDLRaw.FPoint dX dY)
+        (SDLRaw.Color 255 255 255 255)
+        ( SDLRaw.FPoint
+            (sX / fromIntegral iWidth)
+            (abs $ 1 - (sY / fromIntegral iHeight))
+        )
+
+translatePicture :: V2 Int -> Picture -> Picture
+translatePicture v (Picture parts) = Picture $ IM.map translatePicturePart parts
+  where
+    translatePicturePart (PicturePart projection parts) = PicturePart (translateProjection v projection) parts
+    translatePicturePart (PictureRender render) = PicturePart (translation v) $ S.fromList [PictureRender render]
+
+-- | Rotate the `Picture` around the origin (0,0)
+rotatePicture :: Float -> Picture -> Picture
+rotatePicture r (Picture parts) = Picture $ IM.map translatePicturePart parts
+  where
+    translatePicturePart (PicturePart projection parts) = PicturePart (approximateRotation r *** projection) parts
+    translatePicturePart (PictureRender render) = PicturePart (approximateRotation r) $ S.fromList [PictureRender render]
+
+computeCameraProjection :: V2 Int -> Camera -> Projection2D Int
+computeCameraProjection (V2 wx wy) (Camera (V2 cx cy) (V2 vx vy)) =
+  zeroProjection {p00 = vx * vy, p11 = wx * vy, p22 = -wy * vx, p10 = -cx * wx * vy, p20 = vx * wy * (vy + cy)}
 
 data ImagePath = ImagePath
   { renderer :: !SDL.Renderer,
@@ -237,21 +271,24 @@ instance Asset ImagePath where
 withImage :: GameEnv -> Text -> (Image -> Signal a b) -> Signal a b
 withImage gameEnv path = withAsset gameEnv.assets () (ImagePath gameEnv.renderer path)
 
--- | `PictureAtoms` are stored in a spatial map. `boundingBoxSize` is the
--- size of each quadrant.
--- boundingBoxSize :: V2 Int
--- boundingBoxSize = pure 2048
+newtype Render a = Render (RenderContext -> Projection2D Int -> IO a)
+  deriving (Functor, Semigroup, Monoid)
 
--- -- | Computes the bounding box index for a global coordinate
--- positionToBoundingBox :: V2 Int -> V2 Int
--- positionToBoundingBox position =
---   let fractionalBox = liftA2 (%) (position + ((`quot` 2) <$> boundingBoxSize)) boundingBoxSize
---    in floor <$> fractionalBox
+instance Applicative Render where
+  pure a = Render $ \_ _ -> pure a
+  (Render f) <*> (Render a) = Render $ \rc projection -> f rc projection <*> a rc projection
+  {-# INLINE pure #-}
+  {-# INLINE (<*>) #-}
 
--- -- | Computes all the bounding box indices for a rectangular box
--- boundingBoxes :: V2 Int -> V2 Int -> [V2 Int]
--- boundingBoxes position size =
---   let halfSize = (`quot` 2) <$> size
---       (V2 left bottom) = positionToBoundingBox $ position - halfSize
---       (V2 right top) = positionToBoundingBox $ position + halfSize
---    in sequenceA $ V2 [left .. right] [bottom .. top]
+instance Monad Render where
+  (Render makeA) >>= f = Render $ \rc projection -> do
+    a <- makeA rc projection
+    let (Render makeB) = f a
+    makeB rc projection
+  {-# INLINE (>>=) #-}
+
+getX :: V2 a -> a
+getX (V2 x _) = x
+
+getY :: V2 a -> a
+getY (V2 _ y) = y

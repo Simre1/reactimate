@@ -23,8 +23,7 @@ main =
 	        constant (Camera (V2 0 0) (V2 800 600), picture) >>> render gameEnv >>> constant Nothing
 
 picture :: Picture
-picture = makePicture 0 $ BasicShapes $ VS.singleton $
-	ColouredShape (packColour red) (Rectangle (V2 0 0) (V2 500 300))
+picture = makePicture 0 $ drawRectangle (packColour red) $ Rectangle (V2 0 0) (V2 500 300)
 ```
 
 ## Reactimate Game Examples
