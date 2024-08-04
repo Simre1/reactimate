@@ -40,7 +40,7 @@ library
     build-depends: 
         containers,
         vector,
-        async,
+        async >= 2.2,
         random
 
 executable bench

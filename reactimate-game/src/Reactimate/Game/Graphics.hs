@@ -1,4 +1,3 @@
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -10,8 +9,11 @@ module Reactimate.Game.Graphics
     Picture,
     makePicture,
     staticPicture,
+
+    -- ** Image projections
     translatePicture,
     rotatePicture,
+    projectPicture,
 
     -- * Rendering
     drawRectangle,
@@ -233,6 +235,13 @@ rotatePicture r (Picture parts) = Picture $ IM.map translatePicturePart parts
   where
     translatePicturePart (PicturePart projection parts) = PicturePart (approximateRotation r *** projection) parts
     translatePicturePart (PictureRender render) = PicturePart (approximateRotation r) $ S.fromList [PictureRender render]
+
+-- | Apply a homogenous projection to the picture. A projection can translate, rotate, reflect or skew a picture.
+projectPicture :: Projection2D Int -> Picture -> Picture
+projectPicture projection (Picture parts) = Picture $ IM.map projectPicturePart parts
+  where
+    projectPicturePart (PicturePart innerProjection parts) = PicturePart (projection *** innerProjection) parts
+    projectPicturePart (PictureRender render) = PicturePart projection $ S.fromList [PictureRender render]
 
 computeCameraProjection :: V2 Int -> Camera -> Projection2D Int
 computeCameraProjection (V2 wx wy) (Camera (V2 cx cy) (V2 vx vy)) =
