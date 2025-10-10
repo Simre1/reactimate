@@ -1,10 +1,13 @@
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE TypeAbstractions #-}
 
 module Reactimate.Switching where
 
+import Control.Arrow
 import Control.Monad (when)
-import Data.IORef
 import Data.Vector qualified as V
+import Effectful
+import Reactimate.Basic
 import Reactimate.Signal
 
 -- | 'caseOf' is a powerful combinator to implement switching behavior. It is similar to case expressions, but for signal functions.
@@ -14,66 +17,63 @@ import Reactimate.Signal
 -- they keep their state.
 --
 -- Beware that this function should not be used when @c@ has many (~dozens) cases, since the setup phase will be run for each case.
-caseOf :: forall c a b. (Bounded c, Enum c) => Signal a c -> (c -> Signal a b) -> Signal a b
-caseOf decider makeSignal = Signal $ \fin -> do
+caseOf :: (Bounded c, Enum c) => Signal es a c -> (c -> Signal es a b) -> Signal es a b
+caseOf @c decider makeSignal = Signal $ do
   when (fromEnum (maxBound :: c) - fromEnum (minBound :: c) > 100) $
-    fail "You probably do not want to use `caseSignal` with so many cases. Use `manyCaseSignal` if you really want to."
-  unSignal (manyCaseSignal decider makeSignal) fin
+    fail "You probably do not want to branch with so many cases. Use `manyCaseSignal` if you are really sure."
+  unSignal (manyCaseSignal decider makeSignal)
 {-# INLINE caseOf #-}
 
 -- | Same as `caseOf` but will not error when you have a @c@ with many cases.
-manyCaseSignal :: (Bounded c, Enum c) => Signal a c -> (c -> Signal a b) -> Signal a b
-manyCaseSignal (Signal makeDecider) makeSignal = Signal $ \fin -> do
-  decide <- makeDecider fin
-  signals <- V.fromList <$> traverse (\c -> unSignal (makeSignal c) fin) [minBound .. maxBound]
+manyCaseSignal :: (Bounded c, Enum c) => Signal es a c -> (c -> Signal es a b) -> Signal es a b
+manyCaseSignal (Signal makeDecider) makeSignal = Signal $ do
+  decide <- makeDecider
+  signals <- V.fromList <$> traverse (\c -> unSignal (makeSignal c)) [minBound .. maxBound]
   pure $ \a -> do
     c <- decide a
     let step = signals V.! fromEnum c
     step a
 {-# INLINE manyCaseSignal #-}
 
--- | Switch out a signal function with another when you produce a @Just c@ value once.
+-- | Add a signal input for switching. If you feed in a new signal function, it will become active immediately and not run the old one.
+-- After a `Signal` has been switched out, it's outputs might be corrupted due to resource cleanup.
+rSwitch :: Signal es a b -> Signal es (Maybe (Signal es a b), a) b
+rSwitch initial = Signal $ withSwitch $ \switchPoint -> do
+  pure $
+    ( initial,
+      \(maybeNewSignal, a) -> do
+        case maybeNewSignal of
+          Nothing -> pure ()
+          Just newSignal ->
+            updateSwitch switchPoint newSignal
+        runSwitch switchPoint a
+    )
+{-# INLINE rSwitch #-}
+
+-- | Switch out a signal function with another when you produce a @Just c@ value once. Be aware that each use of 'switch' has a small incremental cost. So if you switch often, use something like 'rSwitch' .
 -- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.
-switch :: Signal a (b, Maybe c) -> (c -> Signal a b) -> Signal a b
-switch signal kont = Signal $ \fin -> mdo
-  newFin <- newFinalizer
-  f <- unSignal signal newFin
+switch :: Signal es a (b, Maybe c) -> (c -> Signal es a b) -> Signal es a b
+switch signal kont = Signal $ withSwitch $ \switchPoint -> do
+  let initialSignal =
+        signal
+          >>> arrEff
+            ( \(b, mc) -> do
+                case mc of
+                  Nothing -> pure ()
+                  Just c -> do
+                    updateSwitch switchPoint $ kont c
+                pure b
+            )
+  pure (initialSignal, runSwitch switchPoint)
 
-  stepRef <- newIORef $ \a -> do
-    (b, maybeC) <- f a
-    case maybeC of
-      Nothing -> pure b
-      Just c -> do
-        newStep <- unSignal (kont c) fin
-        writeIORef stepRef newStep
-        runFinalizer newFin
-        newStep a
-
-  pure $ \a -> do
-    step <- readIORef stepRef
-    step a
-
--- | Switch out a signal function with another when you produce a @Just c@ value continously.
--- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.
---
--- `switchRepeatedly` is more efficient than `switch` if you switch often.
-switchRepeatedly :: Signal a (b, Maybe c) -> (c -> Signal a (b, Maybe c)) -> Signal a b
-switchRepeatedly signal kont = Signal $ \_ -> mdo
-  let switchingF fin step a = do
-        (b, maybeC) <- step a
-        case maybeC of
-          Nothing -> pure b
-          Just c -> do
-            newFin <- newFinalizer
-            newStep <- unSignal (kont c) newFin
-            writeIORef stepRef (switchingF newFin newStep)
-            runFinalizer fin
-            switchingF newFin newStep a
-
-  newFin <- newFinalizer
-  f <- unSignal signal newFin
-  stepRef <- newIORef (switchingF newFin f)
-
-  pure $ \a -> do
-    step <- readIORef stepRef
-    step a
+problematic :: (IOE :> es) => Int -> Signal es Int Int
+problematic threshold =
+  switch
+    ( arrIO $ \i -> do
+        pure (i, if i > threshold then Just i else Nothing)
+    )
+    ( \i ->
+        arrIO
+          (\i -> print ("T: " <> show threshold) >> pure i)
+          >>> problematic i
+    )

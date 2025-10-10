@@ -29,21 +29,16 @@ module Reactimate
     feedbackState,
     feedbackLazyState,
     scan,
-
-    -- * Delay signals
-    delaySample,
-    once,
+    delay,
 
     -- * Switch signals
     caseOf,
     switch,
-    switchRepeatedly,
+    rSwitch,
 
     -- * Signal Setup
     withSetup,
-    withSetup_,
-    allocateResource,
-    addFinalizer,
+    bracketSetup,
 
     -- * Time in signals
     Time,
@@ -63,36 +58,17 @@ module Reactimate
     reactimate,
     sample,
     fold,
-    reactimateEvent,
     limitSampleRate,
     resample,
     resampleInThread,
 
     -- * Events
     Event,
-    Behavior,
-    Dynamic,
-    makeBehavior,
-    pulseEvent,
-    instantEvent,
-    callback,
-    mapEvent,
-    mapBehavior,
-    holdEvent,
-    dynamicToEvent,
-    dynamicToBehavior,
-    -- ** Sampling events
-    accumulateEvent,
-    sampleEvent,
-    sampleEventAsList,
-    sampleBehavior,
-    sampleDynamic,
   )
 where
 
 import Control.Arrow
 import Reactimate.Basic
-import Reactimate.Delay
 import Reactimate.Event
 import Reactimate.Random
 import Reactimate.Run

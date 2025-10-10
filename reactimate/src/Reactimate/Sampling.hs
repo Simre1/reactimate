@@ -2,84 +2,96 @@ module Reactimate.Sampling where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
+import Control.Concurrent.MVar
 import Control.Monad (forever, when)
 import Data.IORef
 import Data.Sequence (Seq)
 import Data.Sequence qualified as S
 import Data.Word (Word64)
+import Effectful
+import Effectful.Dispatch.Static
 import GHC.Clock (getMonotonicTimeNSec)
+import Reactimate.Setup (bracketSetup)
 import Reactimate.Signal
 import Reactimate.Time
 
 -- | Resamples a Signal with the first argument as the specified @frameTime@ within the same thread. The resampled Signal will have a fixed time delta of @frameTime@.
 -- The inputs and outputs are collected in a sequence.
-resample :: Double -> Time -> (Time -> Signal (Seq a) b) -> Signal a (Seq b)
-resample frameTime time signal = Signal $ \fin -> do
-  f <- unSignal (withFixedTime frameTime signal) fin
-  nextSampleTimeRef <- newIORef 0
-  inputRef <- newIORef S.empty
-  outputRef <- newIORef S.empty
-  ct <- unSignal (currentTime time) fin
+resample :: (Time :> es) => Double -> (Signal es (Seq a) b) -> Signal es a (Seq b)
+resample frameTime signal = Signal $ withRef 0 $ \nextSampleTimeRef ->
+  withRef S.empty $ \inputRef -> withRef S.empty $ \outputRef -> do
+    f <- unSignal (interposeFixedTime frameTime signal)
+    ct <- unSignal currentTime
 
-  pure $ \a -> do
-    modifyIORef' inputRef (S.:|> a)
+    pure $ \a -> do
+      modifyRef' inputRef (S.:|> a)
 
-    initialSampleTime <- readIORef nextSampleTimeRef
-    when (initialSampleTime <= 1) $ do
-      -- no sampling has been done yet in this branch, so schedule the next sample to now
-      ct () >>= writeIORef nextSampleTimeRef
+      initialSampleTime <- readRef nextSampleTimeRef
+      when (initialSampleTime <= 1) $ do
+        -- no sampling has been done yet in this branch, so schedule the next sample to now
+        ct () >>= writeRef nextSampleTimeRef
 
-    let go = do
-          nextSampleTime <- readIORef nextSampleTimeRef
-          now <- ct ()
+      let go = do
+            nextSampleTime <- readRef nextSampleTimeRef
+            now <- ct ()
 
-          when (now >= nextSampleTime) $ do
-            inputs <- readIORef inputRef
-            writeIORef inputRef S.empty
-            b <- f inputs
-            modifyIORef' outputRef (S.:|> b)
-            writeIORef nextSampleTimeRef (nextSampleTime + frameTime)
-            go
+            when (now >= nextSampleTime) $ do
+              inputs <- readRef inputRef
+              writeRef inputRef S.empty
+              b <- f inputs
+              modifyRef' outputRef (S.:|> b)
+              writeRef nextSampleTimeRef (nextSampleTime + frameTime)
+              go
 
-    go
+      go
 
-    bs <- readIORef outputRef
-    writeIORef outputRef S.empty
-    pure bs
+      bs <- readRef outputRef
+      writeRef outputRef S.empty
+      pure bs
 
--- \| Samples a signal function in another thread. You may want to limit sampling speed with `limitSampleRate`.
-resampleInThread :: Signal (Seq a) b -> Signal a (Seq b)
-resampleInThread signal = Signal $ \fin -> do
-  f <- unSignal signal fin
-  inputRef <- newIORef S.empty
-  outputRef <- newIORef S.empty
+-- | Samples a signal function in another thread. You may want to limit sampling speed with `limitSampleRate`.
+resampleInThread :: (IOE :> es) => Signal es (Seq a) b -> Signal es a (Seq b)
+resampleInThread signal = Signal $ withRef S.empty $ \inputRef -> withRef S.empty $ \outputRef -> do
+  f <- unSignal signal
 
-  asyncRef <- async $ forever $ do
-    inputs <- atomicModifyIORef' inputRef (S.empty,)
-    output <- f inputs
-    modifyIORef' outputRef (S.:|> output)
+  unSignal $
+    bracketSetup
+      ( liftIO $ do
+          mVar <- newEmptyMVar
+          asyncRef <- async $ forever $ do
+            unlift <- readMVar mVar
+            unlift $ do
+              inputs <- atomicModifyRef' inputRef (S.empty,)
+              output <- f inputs
+              modifyRef' outputRef (S.:|> output)
+          pure (mVar, asyncRef)
+      )
+      (liftIO . cancel . snd)
+      ( \(mVar, _) -> Signal $ do
+          pure $ \a -> do
+            -- TODO: Not sure if escaping the scope is safe ...docs do not say anything
+            unlift <- unsafeEff $ \env -> concUnliftIO env Ephemeral (Limited 1) $ \unlift -> do
+              pure unlift
+            _ <- liftIO $ swapMVar mVar unlift
 
-  addFinalizer fin (cancel asyncRef)
-
-  pure $ \a -> do
-    modifyIORef' inputRef (S.:|> a)
-    atomicModifyIORef' outputRef (S.empty,)
+            modifyRef' inputRef (S.:|> a)
+            atomicModifyRef' outputRef (S.empty,)
+      )
 
 -- | Limit the real world samples per second. The first argument is samples per second.
-limitSampleRate :: Double -> Signal a b -> Signal a b
-limitSampleRate frameTime' (Signal signal) = Signal $ \fin -> do
-  f <- signal fin
-  timeRef <- newIORef 0
+limitSampleRate :: (IOE :> es) => Double -> Signal es a b -> Signal es a b
+limitSampleRate frameTime' (Signal signal) = Signal $ withRef 0 $ \timeRef -> do
+  f <- signal
   pure $ \a -> do
     b <- f a
-    oldTime <- readIORef timeRef
-    cTime <- getMonotonicTimeNSec
+    oldTime <- readRef timeRef
+    cTime <- liftIO getMonotonicTimeNSec
     let !waitTime = nanos - fromIntegral (cTime - oldTime)
     if waitTime > 0
       then do
-        writeIORef timeRef $ oldTime + nanosW64
-        threadDelay (waitTime `quot` 1000)
-      else writeIORef timeRef cTime
+        writeRef timeRef $ oldTime + nanosW64
+        liftIO $ threadDelay (waitTime `quot` 1000)
+      else writeRef timeRef cTime
     pure b
   where
     frameTime = 1 / frameTime'

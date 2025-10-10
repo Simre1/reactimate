@@ -1,27 +1,42 @@
 module Reactimate.Setup where
 
+import Effectful
+import Effectful.Exception (bracket)
 import Reactimate.Signal
 
--- | Allocate some resources and add them to the environment.
--- Use the `Finalizer` to destroy the resource.
-allocateResource :: (Finalizer -> IO r) -> (r -> Signal a b) -> Signal a b
-allocateResource f signal = Signal $ \fin -> do
-  res <- f fin
-  unSignal (signal res) fin
-{-# INLINE allocateResource #-}
+-- | Evaluate the signal once and then return its result
+once :: Signal es a b -> Signal es a b
+once (Signal signal) = Signal $ withRef Nothing $ \ref -> do
+  f <- signal
+  pure $ \a -> do
+    maybeB <- readRef ref
+    case maybeB of
+      Just b -> pure b
+      Nothing -> do
+        !b <- f a
+        writeRef ref (Just b)
+        pure b
+{-# INLINE once #-}
 
--- | Do some setup before any signal functions actually run.
--- The setup action will be run **once** before any signal functions produce outputs.
-withSetup :: IO r -> (r -> Signal a b) -> Signal a b
-withSetup setup signal = Signal $ \fin -> do
-  r <- setup
-  unSignal (signal r) fin
+withSetup :: Eff es x -> (x -> Signal es a b) -> Signal es a b
+withSetup effX kont = Signal $ withSwitch $ \switchPoint -> do
+  pure $
+    ( Signal $ pure $ \a -> do
+        x <- effX
+        updateSwitch switchPoint (kont x)
+        runSwitch switchPoint a,
+      runSwitch switchPoint
+    )
 {-# INLINE withSetup #-}
 
--- | Do some setup before any signal functions actually run.
--- The setup action will be run **once** before any signal functions produce outputs.
-withSetup_ :: IO r -> Signal a b -> Signal a b
-withSetup_ setup signal = Signal $ \fin -> do
-  _ <- setup
-  unSignal signal fin
-{-# INLINE withSetup_ #-}
+bracketSetup :: Eff es x -> (x -> Eff es ()) -> (x -> Signal es a b) -> Signal es a b
+bracketSetup effX finalize kont = Signal $ withSwitch $ \switchPoint -> do
+  finalizer <- getFinalizer
+  pure $
+    ( Signal $ pure $ \a -> do
+        x <- bracket effX (\x -> finalizer (finalize x)) pure
+        updateSwitch switchPoint (kont x)
+        runSwitch switchPoint a,
+      runSwitch switchPoint
+    )
+{-# INLINE bracketSetup #-}

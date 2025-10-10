@@ -18,7 +18,9 @@ common common
     default-extensions:
         DataKinds
     build-depends:    
-        base >=4.17.2.1
+        base >=4.17.2.1,
+        effectful-core >= 2.6.1.0,
+        transformers
 
 library
     import: common
@@ -49,7 +51,8 @@ executable bench
         reactimate,
         Yampa,
         dunai,
-        gauge
+        tasty,
+        tasty-bench
     hs-source-dirs:   bench
     main-is: Main.hs
     ghc-options: -O2

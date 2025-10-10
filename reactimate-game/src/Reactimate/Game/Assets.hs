@@ -20,14 +20,16 @@ newtype AssetStore k = AssetStore (H.LinearHashTable k (Weak (AssetValue k)))
 makeAssets :: IO Assets
 makeAssets = Assets <$> H.new
 
---
 class (Hashable key, Typeable key) => Asset key where
   -- | The asset you want to load. The key determines the type of the asset.
   type AssetValue key
+
   -- | The environment you need for the asset loading. BEWARE that this environment must be the same if the `AssetKey` is the same!
   type AssetEnv key
+
   -- | Load an asset with the asset environment and the key.
   loadAsset :: AssetEnv key -> key -> IO (AssetValue key)
+
   -- | Free the asset after no one uses it anymore. This action might not run if the program exits.
   freeAsset :: key -> AssetValue key -> IO ()
 
