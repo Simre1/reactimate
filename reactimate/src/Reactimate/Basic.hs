@@ -2,8 +2,8 @@ module Reactimate.Basic where
 
 import Control.Arrow (Arrow (..))
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import Effectful (Eff, IOE, (:>))
 import Reactimate.Signal
+import Reactimate.Union
 
 -- | Duplicating the input may be useful for various other arrow combinators.
 dup :: Signal es a (a, a)
@@ -26,21 +26,31 @@ constant = pure
 {-# INLINE constant #-}
 
 -- | Run an effectful action during a signal function.
-arrEff :: (a -> Eff es b) -> Signal es a b
-arrEff f = Signal $ pure f
-{-# INLINE arrEff #-}
+arrStep :: (Member e es) => (forall s. e s -> a -> Step s b) -> Signal es a b
+arrStep f = makeSignal $ do
+  e <- getHandle
+  let g = f e
+  pure $ \a -> g a
+{-# INLINE arrStep #-}
 
 -- | Run an IO action during a signal function.
 arrIO :: (IOE :> es) => (a -> IO b) -> Signal es a b
-arrIO f = Signal $ pure $ liftIO . f
+arrIO f = makeSignal $ do
+  IOE lift <- getHandle
+  pure $ lift . f
 {-# INLINE arrIO #-}
 
 -- | Run an effectful action during a signal function without input.
-actionEff :: Eff es a -> Signal es x a
-actionEff action = Signal $ pure (const action)
-{-# INLINE actionEff #-}
+actionStep :: (Member e es) => (forall s. e s -> Step s a) -> Signal es x a
+actionStep action = makeSignal $ do
+  e <- getHandle
+  let a = action e
+  pure $ \_ -> a
+{-# INLINE actionStep #-}
 
 -- | Run an effectful action during a signal function without input.
 actionIO :: (IOE :> es) => IO a -> Signal es x a
-actionIO action = Signal $ pure (const (liftIO action))
+actionIO action = makeSignal $ do
+  IOE lift <- getHandle
+  pure $ \_ -> lift action
 {-# INLINE actionIO #-}

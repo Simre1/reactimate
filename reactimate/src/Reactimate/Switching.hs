@@ -6,9 +6,9 @@ module Reactimate.Switching where
 import Control.Arrow
 import Control.Monad (when)
 import Data.Vector qualified as V
-import Effectful
 import Reactimate.Basic
 import Reactimate.Signal
+import Reactimate.Union
 
 -- | 'caseOf' is a powerful combinator to implement switching behavior. It is similar to case expressions, but for signal functions.
 --
@@ -38,10 +38,10 @@ manyCaseSignal (Signal makeDecider) makeSignal = Signal $ do
 -- | Add a signal input for switching. If you feed in a new signal function, it will become active immediately and not run the old one.
 -- After a `Signal` has been switched out, it's outputs might be corrupted due to resource cleanup.
 rSwitch :: Signal es a b -> Signal es (Maybe (Signal es a b), a) b
-rSwitch initial = Signal $ withSwitch $ \switchPoint -> do
+rSwitch initial = Signal $ do
+  switchPoint <- newSwitch (unSignal initial)
   pure $
-    ( initial,
-      \(maybeNewSignal, a) -> do
+    ( \(maybeNewSignal, a) -> do
         case maybeNewSignal of
           Nothing -> pure ()
           Just newSignal ->
@@ -53,18 +53,18 @@ rSwitch initial = Signal $ withSwitch $ \switchPoint -> do
 -- | Switch out a signal function with another when you produce a @Just c@ value once. Be aware that each use of 'switch' has a small incremental cost. So if you switch often, use something like 'rSwitch' .
 -- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.
 switch :: Signal es a (b, Maybe c) -> (c -> Signal es a b) -> Signal es a b
-switch signal kont = Signal $ withSwitch $ \switchPoint -> do
-  let initialSignal =
-        signal
-          >>> arrEff
-            ( \(b, mc) -> do
-                case mc of
-                  Nothing -> pure ()
-                  Just c -> do
-                    updateSwitch switchPoint $ kont c
-                pure b
-            )
-  pure (initialSignal, runSwitch switchPoint)
+switch signal kont = makeSignal $ mdo
+  let initialSignal = do
+        f <- unSignal signal
+        pure $ \a -> do
+          (b, mc) <- f a
+          case mc of
+            Nothing -> pure ()
+            Just c -> do
+              updateSwitch switchPoint $ kont c
+          pure b
+  switchPoint <- newSwitch initialSignal
+  pure (runSwitch switchPoint)
 
 problematic :: (IOE :> es) => Int -> Signal es Int Int
 problematic threshold =

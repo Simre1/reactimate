@@ -1,13 +1,12 @@
 module Reactimate.Setup where
 
-import Effectful
-import Effectful.Exception (bracket)
 import Reactimate.Signal
 
 -- | Evaluate the signal once and then return its result
 once :: Signal es a b -> Signal es a b
-once (Signal signal) = Signal $ withRef Nothing $ \ref -> do
-  f <- signal
+once signal = makeSignal $ do
+  ref <- newRef Nothing
+  f <- unSignal signal
   pure $ \a -> do
     maybeB <- readRef ref
     case maybeB of
@@ -18,25 +17,16 @@ once (Signal signal) = Signal $ withRef Nothing $ \ref -> do
         pure b
 {-# INLINE once #-}
 
-withSetup :: Eff es x -> (x -> Signal es a b) -> Signal es a b
-withSetup effX kont = Signal $ withSwitch $ \switchPoint -> do
-  pure $
-    ( Signal $ pure $ \a -> do
-        x <- effX
-        updateSwitch switchPoint (kont x)
-        runSwitch switchPoint a,
-      runSwitch switchPoint
-    )
+withSetup :: (forall s. Setup es s x) -> (x -> Signal es a b) -> Signal es a b
+withSetup setupX kont = makeSignal $ do
+  x <- setupX
+  unSignal (kont x)
 {-# INLINE withSetup #-}
 
-bracketSetup :: Eff es x -> (x -> Eff es ()) -> (x -> Signal es a b) -> Signal es a b
-bracketSetup effX finalize kont = Signal $ withSwitch $ \switchPoint -> do
-  finalizer <- getFinalizer
-  pure $
-    ( Signal $ pure $ \a -> do
-        x <- bracket effX (\x -> finalizer (finalize x)) pure
-        updateSwitch switchPoint (kont x)
-        runSwitch switchPoint a,
-      runSwitch switchPoint
-    )
+bracketSetup :: (forall s. (Setup es s x, x -> Setup es s ())) -> (x -> Signal es a b) -> Signal es a b
+bracketSetup aquireRelease kont = makeSignal $ do
+  let (aquire, release) = aquireRelease
+  x <- aquire
+  finalize (release x)
+  unSignal $ kont x
 {-# INLINE bracketSetup #-}

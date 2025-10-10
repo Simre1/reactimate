@@ -1,10 +1,10 @@
 module Reactimate.Random where
 
 import Control.Arrow (Arrow (..))
-import Effectful
 import Reactimate.Basic
 import Reactimate.Signal
 import Reactimate.Stateful
+import Reactimate.Union
 import System.Random
 
 -- | Generates a pseudo-random signal with the global RNG

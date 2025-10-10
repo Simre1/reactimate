@@ -2,6 +2,7 @@
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE RoleAnnotations #-}
 
 module Reactimate.Signal where
 
@@ -9,22 +10,32 @@ import Control.Arrow
 import Control.Category
 import Control.Exception (bracket)
 import Control.Monad (join, (>=>))
+import Control.Monad.Fix
 import Control.Monad.Trans.Reader
+import Data.Coerce
 import Data.IORef
-import Effectful (Eff, IOE, runEff, runPureEff)
-import Effectful.Dispatch.Static (unEff, unsafeEff, unsafeEff_)
+import Data.Kind (Type)
+import GHC.IO (unsafePerformIO)
 import GHC.IO.Unsafe (unsafeInterleaveIO)
-import System.IO.Unsafe (unsafePerformIO)
+import Reactimate.Union
+import Unsafe.Coerce
 import Prelude hiding (id, (.))
 
 -- | A signal function takes @a@s and produces @b@, similar to a function @a -> b@.
 -- However, it can also remember previous iterations and is perfect for building simulation/game loops.
 --
 -- Notice that `Signal` is an instance of `Functor`, `Applicative` and `Arrow`!
-newtype Signal es a b = Signal (Setup (a -> Eff es b))
+newtype Signal es a b = Signal (Setup es X (a -> Step X b))
 
-newtype Setup a = Setup {unSetup :: Finalizer -> IO a}
-  deriving (Functor, Applicative, Monad, MonadFail) via ReaderT Finalizer IO
+newtype Step (s :: Type) a = Step {unStep :: IO a} deriving (Functor, Applicative, Monad)
+
+data Context es s = Context
+  { handles :: Union es,
+    finalizer :: Finalizer s
+  }
+
+newtype Setup es (s :: Type) a = Setup {unSetup :: Context es s -> IO a}
+  deriving (Functor, Applicative, Monad, MonadFix, MonadFail) via ReaderT (Context es s) IO
 
 instance Functor (Signal es a) where
   fmap f (Signal m) = Signal $ fmap (fmap f .) m
@@ -100,111 +111,135 @@ instance ArrowChoice (Signal es) where
   {-# INLINE (+++) #-}
   {-# INLINE (|||) #-}
 
--- | Unwrap a signal function. The outer setup happens only once and produces the step action in `Eff`.
-unSignal :: Signal es a b -> Setup (a -> Eff es b)
-unSignal (Signal signal) = signal
+-- | Unwrap a signal function. The outer setup happens only once and produces the step action.
+unSignal :: Signal es a b -> Setup es s (a -> Step s b)
+unSignal (Signal signal) = coerce signal
 {-# INLINE unSignal #-}
 
--- | Do not leak 'Ref' from 'Setup'
+newtype IOE s = IOE (forall a. IO a -> Step s a)
+
+makeSignal :: (forall s. Setup es s (a -> Step s b)) -> Signal es a b
+makeSignal f = Signal f
+
+getHandle :: forall e es s. (Member e es) => Setup es s (e s)
+getHandle = Setup $ \Context {handles} -> do
+  let ex :: e X = getMember handles
+  pure (unsafeCoerce ex)
+
+finalize :: Setup es s () -> Setup es s ()
+finalize release = Setup $ \ctx@Context {finalizer} ->
+  addFinalizer finalizer $ unSetup release ctx
+{-# INLINE finalize #-}
+
 newtype Ref s a = Ref (IORef a)
 
-withRef :: a -> (forall s. Ref s a -> Setup x) -> Setup x
-withRef a f = do
-  ref <- Setup $ \_ -> Ref <$> newIORef a
-  f ref
-{-# INLINE withRef #-}
+newRef :: a -> Setup es s (Ref s a)
+newRef a = Setup $ \_ -> Ref <$> newIORef a
+{-# INLINE newRef #-}
 
-writeRef :: Ref s a -> a -> Eff es ()
-writeRef (Ref ref) a = unsafeEff_ (writeIORef ref a)
+writeRef :: Ref s a -> a -> Step s ()
+writeRef (Ref ref) a = Step (writeIORef ref a)
 {-# INLINE writeRef #-}
 
-readRef :: Ref s a -> Eff es a
-readRef (Ref ref) = unsafeEff_ (readIORef ref)
+readRef :: Ref s a -> Step s a
+readRef (Ref ref) = Step (readIORef ref)
 {-# INLINE readRef #-}
 
-modifyRef :: Ref s a -> (a -> a) -> Eff es ()
-modifyRef (Ref ref) f = unsafeEff_ (modifyIORef ref f)
+modifyRef :: Ref s a -> (a -> a) -> Step s ()
+modifyRef (Ref ref) f = Step (modifyIORef ref f)
 {-# INLINE modifyRef #-}
 
-modifyRef' :: Ref s a -> (a -> a) -> Eff es ()
-modifyRef' (Ref ref) f = unsafeEff_ (modifyIORef' ref f)
+modifyRef' :: Ref s a -> (a -> a) -> Step s ()
+modifyRef' (Ref ref) f = Step (modifyIORef' ref f)
 {-# INLINE modifyRef' #-}
 
-atomicModifyRef' :: Ref s a -> (a -> (a, b)) -> Eff es b
-atomicModifyRef' (Ref ref) f = unsafeEff_ (atomicModifyIORef' ref f)
+atomicModifyRef' :: Ref s a -> (a -> (a, b)) -> Step s b
+atomicModifyRef' (Ref ref) f = Step (atomicModifyIORef' ref f)
 {-# INLINE atomicModifyRef' #-}
 
-runSetup :: Setup (Eff es a) -> Eff es a
-runSetup (Setup f) = do
-  eff <- unsafeEff_ $ withFinalizer $ \fin -> f fin
-  eff
-{-# INLINE runSetup #-}
+runPureSetup :: Setup '[] s a -> a
+runPureSetup (Setup f) = unsafePerformIO $ withFinalizer $ \fin -> f (Context EmptyUnion fin)
 
-data Switch s es a b = Switch (IORef (a -> Eff es b)) (IORef Finalizer)
+runSetup :: Setup '[IOE] s a -> IO a
+runSetup (Setup f) = withFinalizer $ \fin -> f (Context (ConsUnion (IOE Step) EmptyUnion) fin)
 
-withSwitch :: (forall s. Switch s es a b -> Setup (Signal es a b, x)) -> Setup x
-withSwitch f = Setup $ \globalFin -> mdo
+runHandle :: e s -> Setup (e : es) s a -> Setup es s a
+runHandle e (Setup f) = Setup $ \Context {handles, finalizer} ->
+  f (Context (ConsUnion (unsafeCoerce e) handles) finalizer)
+
+mapSignal :: (forall s. Setup es s (a -> Step s b) -> Setup es2 s (c -> Step s d)) -> Signal es a b -> Signal es2 c d
+mapSignal f (Signal setup) = Signal $ f setup
+
+mapEffects :: (forall s x. Setup es s x -> Setup es2 s x) -> Signal es a b -> Signal es2 a b
+mapEffects f (Signal setup) = Signal $ f setup
+
+prestep :: Step s a -> Setup es s a
+prestep (Step io) = Setup (\_ -> io)
+
+data Switch s es a b = Switch (IORef (a -> Step s b)) (IORef (Context es s))
+
+newSwitch :: (Setup es s (a -> Step s b)) -> Setup es s (Switch s es a b)
+newSwitch signal = Setup $ \ctx@Context {handles, finalizer = globalFinalizer} -> do
   initialFin <- newFinalizer
-  initialF <- unsafeInterleaveIO $ makeInitialSignal initialFin
+  initialF <- unSetup signal ctx
 
   signalRef <- newIORef initialF
-  finalizerRef <- newIORef initialFin
-  addFinalizer globalFin (readIORef finalizerRef >>= runFinalizer)
+  contextRef <- newIORef $ Context handles initialFin
+  addFinalizer
+    globalFinalizer
+    (readIORef contextRef >>= runFinalizer . (\Context {finalizer} -> finalizer))
 
-  let switch = Switch signalRef finalizerRef
-  (Signal (Setup (makeInitialSignal)), x) <- unSetup (f switch) globalFin
-  pure x
+  let switch = Switch signalRef contextRef
+  -- (Signal (, x) <- unSetup (f switch) globalFin
+  pure switch
 
-updateSwitch :: Switch s es1 a b -> Signal es1 a b -> Eff es2 ()
-updateSwitch (Switch signalRef finalizerRef) (Signal (Setup makeNewSignal)) = unsafeEff_ $ do
+updateSwitch :: Switch s es a b -> Signal es a b -> Step s ()
+updateSwitch (Switch signalRef contextRef) (Signal (Setup makeNewSignal)) = Step $ do
   newFin <- newFinalizer
-  newF <- makeNewSignal newFin
-  writeIORef signalRef newF
-  readIORef finalizerRef >>= runFinalizer
-  writeIORef finalizerRef newFin
+  Context {handles, finalizer = oldFin} <- readIORef contextRef
+  runFinalizer oldFin
+  newF <- makeNewSignal (Context handles newFin)
+  writeIORef signalRef $ coerce newF
+  readIORef contextRef >>= runFinalizer . (\Context {finalizer} -> finalizer)
+  writeIORef contextRef (Context handles $ coerce newFin)
 
-runSwitch :: Switch s es a b -> a -> Eff es b
+runSwitch :: Switch s es a b -> a -> Step s b
 runSwitch (Switch signalRef _) a = do
-  f <- unsafeEff_ $ readIORef signalRef
+  f <- Step $ readIORef signalRef
   f a
 {-# INLINE runSwitch #-}
 
-mapEffects :: (Eff es1 b -> Eff es2 c) -> Signal es1 a b -> Signal es2 a c
-mapEffects mapper (Signal signal) = Signal $ do
-  f <- signal
-  pure $ mapper . f
-{-# INLINE mapEffects #-}
+-- mapEffects :: (Eff es1 b -> Eff es2 c) -> Signal es1 a b -> Signal es2 a c
+-- mapEffects mapper (Signal signal) = Signal $ do
+--   f <- signal
+--   pure $ mapper . f
+-- {-# INLINE mapEffects #-}
 
 -- | A `Finalizer` contains some clean-up code.
 -- Usually, they are run when the execution of the signal function stops
-newtype Finalizer = Finalizer (IORef (IO ()))
+newtype Finalizer s = Finalizer (IORef (IO ()))
 
 -- | Add a clean-up function to a `Finalizer`
-addFinalizer :: Finalizer -> IO () -> IO ()
+addFinalizer :: Finalizer s -> IO () -> IO ()
 addFinalizer (Finalizer ref) fin = modifyIORef' ref (fin >>)
 {-# INLINE addFinalizer #-}
 
 -- | Make a new `Finalizer`
-newFinalizer :: IO Finalizer
+newFinalizer :: IO (Finalizer s)
 newFinalizer = Finalizer <$> newIORef (pure ())
 {-# INLINE newFinalizer #-}
 
 -- | Run the clean-up code from finalizer
-runFinalizer :: Finalizer -> IO ()
+runFinalizer :: Finalizer s -> IO ()
 runFinalizer (Finalizer ref) = join $ readIORef ref
 {-# INLINE runFinalizer #-}
 
 -- | Run some code with a `Finalizer` and then run the clean-up code.
 --
 -- You should not return the `Finalizer` and run it again. This has already been done.
-withFinalizer :: (Finalizer -> IO a) -> IO a
+withFinalizer :: (Finalizer s -> IO a) -> IO a
 withFinalizer =
   bracket
     newFinalizer
     runFinalizer
 {-# INLINE withFinalizer #-}
-
-getFinalizer :: Setup (Eff es () -> Eff es ())
-getFinalizer = Setup $ \fin ->
-  pure $ \eff -> unsafeEff (\env -> addFinalizer fin $ unEff eff env)
-{-# INLINE getFinalizer #-}

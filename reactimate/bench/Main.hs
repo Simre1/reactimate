@@ -3,8 +3,8 @@ import Control.Category ((>>>))
 import Data.Foldable (Foldable (..))
 import Data.MonadicStreamFunction qualified as MSF
 import Data.MonadicStreamFunction.InternalCore qualified as MSF
-import Effectful
 import FRP.Yampa qualified as Y
+import Reactimate qualified as Signal
 import Reactimate.Run qualified as Signal
 import Reactimate.Stateful qualified as Signal
 import Reactimate.Time qualified as Signal
@@ -23,7 +23,7 @@ yampaCountBench = do
     (Y.loopPre count (arr (\((), !x) -> (x - 1, x - 1))))
 
 signalCountBench :: IO ()
-signalCountBench = runEff $ do
+signalCountBench = Signal.runSetup $ do
   !x <- Signal.reactimate $ Signal.feedbackState count (arr (\((), !x) -> (x - 1, x - 1))) >>> arr (\x -> if x == 0 then Just x else Nothing)
   pure ()
 
@@ -48,7 +48,7 @@ yampaIntegrateBench x = last (Y.embed (pure (x :: Double) >>> Y.integral) (Y.del
 -- | Here you can see the cost of effect handling
 signalIntegrateBench :: IO Double
 signalIntegrateBench =
-  runEff $
+  Signal.runSetup $
     Signal.fold
       (\_ x -> x)
       0
@@ -62,7 +62,7 @@ yampaChainBench :: Double -> Double
 yampaChainBench x = last $ Y.embed chainTest (x, [])
 
 signalChainBench :: IO Double
-signalChainBench = runEff $ last <$> Signal.sample chainTest [0]
+signalChainBench = Signal.runSetup $ last <$> Signal.sample chainTest [0]
 
 msfChainBench :: IO Double
 msfChainBench = last <$> MSF.embed chainTest [0]

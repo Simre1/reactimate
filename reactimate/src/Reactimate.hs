@@ -2,6 +2,10 @@
 -- It's also possible to react to events as they are happening and integrate them into signal functions.
 module Reactimate
   ( Signal,
+    unSignal,
+    makeSignal,
+    runSetup,
+    runPureSetup,
 
     -- * Basic signals
     identity,

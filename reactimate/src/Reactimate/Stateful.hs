@@ -1,14 +1,13 @@
 module Reactimate.Stateful where
 
-import Control.Arrow ((>>>))
-import Data.IORef
 import Reactimate.Basic
 import Reactimate.Signal
 
 -- | Feeds the output back as input.
 feedback :: b -> Signal es (a, b) b -> Signal es a b
-feedback !initial (Signal signal) = Signal $ withRef initial $ \stateRef -> do
-  f <- signal
+feedback !initial signal = makeSignal $ do
+  stateRef <- newRef initial
+  f <- unSignal signal
   pure $ \a -> do
     !b <- readRef stateRef
     !nextB <- f (a, b)
@@ -18,8 +17,9 @@ feedback !initial (Signal signal) = Signal $ withRef initial $ \stateRef -> do
 
 -- | Feeds the output state back as input. The state @s@ is strict.
 feedbackState :: s -> Signal es (a, s) (b, s) -> Signal es a b
-feedbackState !initial (Signal signal) = Signal $ withRef initial $ \stateRef -> do
-  f <- signal
+feedbackState !initial signal = makeSignal $ do
+  stateRef <- newRef initial
+  f <- unSignal signal
   pure $ \a -> do
     !s <- readRef stateRef
     (b, !s') <- f (a, s)
@@ -29,8 +29,9 @@ feedbackState !initial (Signal signal) = Signal $ withRef initial $ \stateRef ->
 
 -- | Feeds the output state back as input. The state @s@ is lazy, so beware space leaks.
 feedbackLazyState :: s -> Signal es (a, s) (b, s) -> Signal es a b
-feedbackLazyState initial (Signal signal) = Signal $ withRef initial $ \stateRef -> do
-  f <- signal
+feedbackLazyState initial signal = makeSignal $ do
+  stateRef <- newRef initial
+  f <- unSignal signal
   pure $ \a -> do
     s <- readRef stateRef
     (b, s') <- f (a, s)
@@ -58,7 +59,8 @@ movingMean alpha = scan (\b a -> b + alpha * (a - b)) 0
 
 -- | Delay the value by one iteration
 delay :: a -> Signal es a a
-delay initial = Signal $ withRef initial $ \delayRef -> do
+delay initial = makeSignal $ do
+  delayRef <- newRef initial
   pure $ \a' -> do
     a <- readRef delayRef
     writeRef delayRef a'
