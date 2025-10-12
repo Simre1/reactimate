@@ -3,7 +3,7 @@ module Reactimate.Game.Input
     keyboardState,
     mousePosition,
     mouseButtons,
-    gameShouldQuit
+    gameShouldQuit,
   )
 where
 
@@ -44,4 +44,3 @@ gameShouldQuit gameEnv =
   makeBehavior $
     accumulateEvent (||) False $
       (== SDL.QuitEvent) . SDL.eventPayload <$> inputEvents gameEnv
-

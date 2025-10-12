@@ -1,41 +1,93 @@
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecursiveDo #-}
-{-# LANGUAGE RoleAnnotations #-}
 
-module Reactimate.Signal where
+module Reactimate.Signal
+  ( -- * Signal
+    Signal,
+    Step,
+    Setup,
+    unSignal,
+    makeSignal,
+    inheritScope,
+    finalize,
+    prestep,
+    unliftStep,
+
+    -- * Mutable references
+    Ref,
+    newRef,
+    writeRef,
+    readRef,
+    modifyRef,
+    modifyRef',
+    atomicModifyRef,
+    atomicModifyRef',
+
+    -- * Switches
+    Switch,
+    newSwitch,
+    updateSwitch,
+    runSwitch,
+
+    -- * Effects
+    getHandle,
+    getHandles,
+    IOE (..),
+    runHandle,
+    replaceHandle,
+
+    -- * Run Setup
+    runPureSetup,
+    runSetup,
+    mapEffects,
+  )
+where
 
 import Control.Arrow
 import Control.Category
 import Control.Exception (bracket)
 import Control.Monad (join, (>=>))
 import Control.Monad.Fix
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Reader
 import Data.Coerce
 import Data.IORef
 import Data.Kind (Type)
+import Data.Void
 import GHC.IO (unsafePerformIO)
-import GHC.IO.Unsafe (unsafeInterleaveIO)
-import Reactimate.Union
+import Reactimate.Handles
 import Unsafe.Coerce
 import Prelude hiding (id, (.))
 
 -- | A signal function takes @a@s and produces @b@, similar to a function @a -> b@.
 -- However, it can also remember previous iterations and is perfect for building simulation/game loops.
 --
+-- 'Signal' is internally split into a 'Setup' phase which initializes the simulation and a 'Step' phase which runs in each iteration.
+--
 -- Notice that `Signal` is an instance of `Functor`, `Applicative` and `Arrow`!
-newtype Signal es a b = Signal (Setup es X (a -> Step X b))
+newtype Signal es a b = Signal (Setup es Void (a -> Step Void b))
 
+-- | 'Step' is an action which happens in each iteration of the simulation. The 's' is for scoping ('makeSignal').
 newtype Step (s :: Type) a = Step {unStep :: IO a} deriving (Functor, Applicative, Monad)
 
+-- | The 'Setup' context.
 data Context es s = Context
-  { handles :: Union es,
+  { handles :: Handles es s,
     finalizer :: Finalizer s
   }
 
+-- | 'Setup' is an action which initializes the simulation. For example, you can setup a 'Ref' and then use it in 'Step'.
+-- It is also possible to get the effect handles tracked in 'es' with 'getHandle'.
+--
+-- The 's' is for scoping ('makeSignal').
 newtype Setup es (s :: Type) a = Setup {unSetup :: Context es s -> IO a}
   deriving (Functor, Applicative, Monad, MonadFix, MonadFail) via ReaderT (Context es s) IO
+
+instance (IOE :> es) => MonadIO (Setup es s) where
+  liftIO io = do
+    IOE lift <- getHandle
+    prestep $ lift io
 
 instance Functor (Signal es a) where
   fmap f (Signal m) = Signal $ fmap (fmap f .) m
@@ -111,26 +163,38 @@ instance ArrowChoice (Signal es) where
   {-# INLINE (+++) #-}
   {-# INLINE (|||) #-}
 
--- | Unwrap a signal function. The outer setup happens only once and produces the step action.
-unSignal :: Signal es a b -> Setup es s (a -> Step s b)
-unSignal (Signal signal) = coerce signal
-{-# INLINE unSignal #-}
-
-newtype IOE s = IOE (forall a. IO a -> Step s a)
-
+-- | Create a new signal from a setup action which produces a step function.
+-- This needs to be done in a self-contained scope, hence the 'forall s' (ST trick). In particular, 'Ref's cannot leak into signal arguments.
 makeSignal :: (forall s. Setup es s (a -> Step s b)) -> Signal es a b
 makeSignal f = Signal f
 
-getHandle :: forall e es s. (Member e es) => Setup es s (e s)
-getHandle = Setup $ \Context {handles} -> do
-  let ex :: e X = getMember handles
-  pure (unsafeCoerce ex)
+-- | Inherits the scope for creating signals. This can be useful when you need to mix functions which take 'Signal's with 'Setup' code.
+inheritScope :: Setup es s ((Setup es s (a -> Step s b)) -> Signal es a b)
+inheritScope = pure (unsafeCoerce Signal)
 
+-- | Unwrap a signal function. A signal is a 'Setup' action which produces the 'Step' function.
+unSignal :: Signal es a b -> Setup es s (a -> Step s b)
+unSignal (Signal signal) = unsafeCoerce signal
+{-# INLINE unSignal #-}
+
+-- | The 'IO' effect. Only signals with an 'IOE' in their effect list can execute 'IO' operations.
+newtype IOE s = IOE (forall a. IO a -> Step s a)
+
+-- | Get an effect handle if it is within the effect list.
+getHandle :: (Member e es) => Setup es s (e s)
+getHandle = Setup $ \Context {handles} -> pure $ getMember handles
+
+-- | Get multiplie effect handles if they are all within the effect list.
+getHandles :: (Members sub es) => Setup es s (Handles sub s)
+getHandles = Setup $ \Context {handles} -> pure $ getMembers handles
+
+-- | Register an action for finalization. Finalization happens when a signal gets switched out or the whole simulation terminates.
 finalize :: Setup es s () -> Setup es s ()
 finalize release = Setup $ \ctx@Context {finalizer} ->
   addFinalizer finalizer $ unSetup release ctx
 {-# INLINE finalize #-}
 
+-- | A mutable reference which can be used to persist state over iterations. This is based on 'IORef', so not necessarily thread-safe.
 newtype Ref s a = Ref (IORef a)
 
 newRef :: a -> Setup es s (Ref s a)
@@ -153,31 +217,48 @@ modifyRef' :: Ref s a -> (a -> a) -> Step s ()
 modifyRef' (Ref ref) f = Step (modifyIORef' ref f)
 {-# INLINE modifyRef' #-}
 
+atomicModifyRef :: Ref s a -> (a -> (a, b)) -> Step s b
+atomicModifyRef (Ref ref) f = Step (atomicModifyIORef ref f)
+{-# INLINE atomicModifyRef #-}
+
 atomicModifyRef' :: Ref s a -> (a -> (a, b)) -> Step s b
 atomicModifyRef' (Ref ref) f = Step (atomicModifyIORef' ref f)
 {-# INLINE atomicModifyRef' #-}
 
-runPureSetup :: Setup '[] s a -> a
-runPureSetup (Setup f) = unsafePerformIO $ withFinalizer $ \fin -> f (Context EmptyUnion fin)
+-- | Run a pure 'Setup' action without any effects. Look at 'reactimate' or 'sample' to run signal functions.
+runPureSetup :: (forall s. Setup '[] s a) -> a
+runPureSetup (Setup f) = unsafePerformIO $ withFinalizer $ \fin -> f (Context NoHandles fin)
 
-runSetup :: Setup '[IOE] s a -> IO a
-runSetup (Setup f) = withFinalizer $ \fin -> f (Context (ConsUnion (IOE Step) EmptyUnion) fin)
+-- | Run a 'Setup' with 'IO'.
+runSetup :: (forall s. Setup '[IOE] s a) -> IO a
+runSetup (Setup f) = withFinalizer $ \fin -> f (Context (ConsHandle (IOE Step) NoHandles) fin)
 
+-- | Provide a single effect handle. The effect 'e' can be used within the 'Setup' and the 'Step's which were set up as part of that 'Setup'.
 runHandle :: e s -> Setup (e : es) s a -> Setup es s a
 runHandle e (Setup f) = Setup $ \Context {handles, finalizer} ->
-  f (Context (ConsUnion (unsafeCoerce e) handles) finalizer)
+  f (Context (ConsHandle e handles) finalizer)
 
-mapSignal :: (forall s. Setup es s (a -> Step s b) -> Setup es2 s (c -> Step s d)) -> Signal es a b -> Signal es2 c d
-mapSignal f (Signal setup) = Signal $ f setup
+-- | Replace a single effect handle.
+replaceHandle :: (Member e es) => e s -> Setup es s a -> Setup es s a
+replaceHandle e (Setup f) = Setup $ \Context {handles, finalizer} ->
+  f (Context (replaceMember e handles) finalizer)
 
+-- | Map the effects of a signal. Use it in combination with 'runHandle'.
 mapEffects :: (forall s x. Setup es s x -> Setup es2 s x) -> Signal es a b -> Signal es2 a b
 mapEffects f (Signal setup) = Signal $ f setup
 
+-- | Run a 'Step' combination in the 'Setup' phase.
 prestep :: Step s a -> Setup es s a
 prestep (Step io) = Setup (\_ -> io)
 
+-- | Unlift a 'Step' into an 'IO' action.
+unliftStep :: (IOE :> es) => Setup es s (Step s a -> IO a)
+unliftStep = pure (\(Step io) -> io)
+
+-- | A 'Switch' represents a signal function which can be switched out.
 data Switch s es a b = Switch (IORef (a -> Step s b)) (IORef (Context es s))
 
+-- | Creates a new 'Switch' based on a 'Setup' with a 'Step' function. It essentially takes a 'Signal' with a scope due to the shared 's'.
 newSwitch :: (Setup es s (a -> Step s b)) -> Setup es s (Switch s es a b)
 newSwitch signal = Setup $ \ctx@Context {handles, finalizer = globalFinalizer} -> do
   initialFin <- newFinalizer
@@ -190,30 +271,28 @@ newSwitch signal = Setup $ \ctx@Context {handles, finalizer = globalFinalizer} -
     (readIORef contextRef >>= runFinalizer . (\Context {finalizer} -> finalizer))
 
   let switch = Switch signalRef contextRef
-  -- (Signal (, x) <- unSetup (f switch) globalFin
   pure switch
 
-updateSwitch :: Switch s es a b -> Signal es a b -> Step s ()
-updateSwitch (Switch signalRef contextRef) (Signal (Setup makeNewSignal)) = Step $ do
+-- | Updates the signal within a 'Switch'. As soon as you update:
+-- - The 'Setup' of that new signal is executed
+-- - The old signal is finalized
+-- - 'runSwitch' will use the new signal.
+updateSwitch :: Switch s es a b -> (Setup es s (a -> Step s b)) -> Step s ()
+updateSwitch (Switch signalRef contextRef) signal = Step $ do
   newFin <- newFinalizer
   Context {handles, finalizer = oldFin} <- readIORef contextRef
   runFinalizer oldFin
-  newF <- makeNewSignal (Context handles newFin)
-  writeIORef signalRef $ coerce newF
+  newF <- unSetup signal (Context handles newFin)
+  writeIORef signalRef newF
   readIORef contextRef >>= runFinalizer . (\Context {finalizer} -> finalizer)
   writeIORef contextRef (Context handles $ coerce newFin)
 
+-- | Run the active signal for the 'Switch'.
 runSwitch :: Switch s es a b -> a -> Step s b
 runSwitch (Switch signalRef _) a = do
   f <- Step $ readIORef signalRef
   f a
 {-# INLINE runSwitch #-}
-
--- mapEffects :: (Eff es1 b -> Eff es2 c) -> Signal es1 a b -> Signal es2 a c
--- mapEffects mapper (Signal signal) = Signal $ do
---   f <- signal
---   pure $ mapper . f
--- {-# INLINE mapEffects #-}
 
 -- | A `Finalizer` contains some clean-up code.
 -- Usually, they are run when the execution of the signal function stops

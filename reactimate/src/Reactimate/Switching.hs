@@ -1,14 +1,14 @@
 {-# LANGUAGE RecursiveDo #-}
 {-# LANGUAGE TypeAbstractions #-}
 
-module Reactimate.Switching where
+module Reactimate.Switching (caseOf, manyCaseOf, switch, rSwitch) where
 
 import Control.Arrow
 import Control.Monad (when)
 import Data.Vector qualified as V
 import Reactimate.Basic
+import Reactimate.Handles
 import Reactimate.Signal
-import Reactimate.Union
 
 -- | 'caseOf' is a powerful combinator to implement switching behavior. It is similar to case expressions, but for signal functions.
 --
@@ -18,34 +18,34 @@ import Reactimate.Union
 --
 -- Beware that this function should not be used when @c@ has many (~dozens) cases, since the setup phase will be run for each case.
 caseOf :: (Bounded c, Enum c) => Signal es a c -> (c -> Signal es a b) -> Signal es a b
-caseOf @c decider makeSignal = Signal $ do
+caseOf @c decider kontSignal = makeSignal $ do
   when (fromEnum (maxBound :: c) - fromEnum (minBound :: c) > 100) $
     fail "You probably do not want to branch with so many cases. Use `manyCaseSignal` if you are really sure."
-  unSignal (manyCaseSignal decider makeSignal)
+  unSignal (manyCaseOf decider kontSignal)
 {-# INLINE caseOf #-}
 
 -- | Same as `caseOf` but will not error when you have a @c@ with many cases.
-manyCaseSignal :: (Bounded c, Enum c) => Signal es a c -> (c -> Signal es a b) -> Signal es a b
-manyCaseSignal (Signal makeDecider) makeSignal = Signal $ do
-  decide <- makeDecider
-  signals <- V.fromList <$> traverse (\c -> unSignal (makeSignal c)) [minBound .. maxBound]
+manyCaseOf :: (Bounded c, Enum c) => Signal es a c -> (c -> Signal es a b) -> Signal es a b
+manyCaseOf deciderSignal kontSignal = makeSignal $ do
+  decide <- unSignal deciderSignal
+  signals <- V.fromList <$> traverse (\c -> unSignal (kontSignal c)) [minBound .. maxBound]
   pure $ \a -> do
     c <- decide a
     let step = signals V.! fromEnum c
     step a
-{-# INLINE manyCaseSignal #-}
+{-# INLINE manyCaseOf #-}
 
 -- | Add a signal input for switching. If you feed in a new signal function, it will become active immediately and not run the old one.
 -- After a `Signal` has been switched out, it's outputs might be corrupted due to resource cleanup.
 rSwitch :: Signal es a b -> Signal es (Maybe (Signal es a b), a) b
-rSwitch initial = Signal $ do
+rSwitch initial = makeSignal $ do
   switchPoint <- newSwitch (unSignal initial)
   pure $
     ( \(maybeNewSignal, a) -> do
         case maybeNewSignal of
           Nothing -> pure ()
           Just newSignal ->
-            updateSwitch switchPoint newSignal
+            updateSwitch switchPoint (unSignal newSignal)
         runSwitch switchPoint a
     )
 {-# INLINE rSwitch #-}
@@ -61,7 +61,7 @@ switch signal kont = makeSignal $ mdo
           case mc of
             Nothing -> pure ()
             Just c -> do
-              updateSwitch switchPoint $ kont c
+              updateSwitch switchPoint $ unSignal $ kont c
           pure b
   switchPoint <- newSwitch initialSignal
   pure (runSwitch switchPoint)

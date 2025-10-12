@@ -45,7 +45,6 @@ integrateSamples = 1000000
 yampaIntegrateBench :: Double -> Double
 yampaIntegrateBench x = last (Y.embed (pure (x :: Double) >>> Y.integral) (Y.deltaEncode 0.1 [1 .. integrateSamples]))
 
--- | Here you can see the cost of effect handling
 signalIntegrateBench :: IO Double
 signalIntegrateBench =
   Signal.runSetup $

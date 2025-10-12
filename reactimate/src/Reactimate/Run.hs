@@ -1,10 +1,6 @@
-module Reactimate.Run where
+module Reactimate.Run (reactimate, sample, fold) where
 
-import Control.Concurrent (newEmptyMVar, readMVar)
-import Control.Concurrent.MVar (putMVar)
 import Control.Monad
-import Data.IORef (modifyIORef', newIORef, readIORef)
-import Reactimate.Event
 import Reactimate.Signal
 
 -- | Run a signal function repeatedly until it produces a `Just` value.

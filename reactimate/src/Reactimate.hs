@@ -1,11 +1,18 @@
--- | @reactimate@ implements signal which are well suited for simulations, game loops and complicated stream processing.
--- It's also possible to react to events as they are happening and integrate them into signal functions.
+{-# LANGUAGE PatternSynonyms #-}
+
+-- | @reactimate@ implements signals which are well suited for simulations, game loops and complicated stream processing.
 module Reactimate
-  ( Signal,
-    unSignal,
+  ( -- * Signal
+    Signal,
+    Step,
+    Setup,
     makeSignal,
-    runSetup,
+    unSignal,
+    finalize,
+    prestep,
+    unliftStep,
     runPureSetup,
+    runSetup,
 
     -- * Basic signals
     identity,
@@ -27,6 +34,8 @@ module Reactimate
     (+++),
     left,
     right,
+    withSetup,
+    bracketSetup,
 
     -- * Stateful signals
     feedback,
@@ -35,28 +44,26 @@ module Reactimate
     scan,
     delay,
 
+    -- ** Mutable references
+    Ref,
+    newRef,
+    writeRef,
+    readRef,
+    modifyRef,
+    modifyRef',
+    atomicModifyRef,
+    atomicModifyRef',
+
     -- * Switch signals
     caseOf,
     switch,
     rSwitch,
 
-    -- * Signal Setup
-    withSetup,
-    bracketSetup,
-
-    -- * Time in signals
-    Time,
-    withTime,
-    withFixedTime,
-    currentTime,
-    deltaTime,
-    integrate,
-
-    -- * Random signals,
-    generateRandom,
-    generateRandomRange,
-    generateRandomWithRNG,
-    generateRandomRangeWithRNG,
+    -- ** Low-level switch
+    Switch,
+    newSwitch,
+    updateSwitch,
+    runSwitch,
 
     -- * Run signals
     reactimate,
@@ -66,14 +73,47 @@ module Reactimate
     resample,
     resampleInThread,
 
+    -- * Effects
+    Handles (..),
+    pattern Handle,
+    pattern (:->),
+    Member,
+    (:>),
+    Members,
+    getHandle,
+    getHandles,
+    IOE (..),
+    runHandle,
+    replaceHandle,
+    mapEffects,
+
+    -- ** Time in signals
+    Time,
+    withTime,
+    withFixedTime,
+    currentTime,
+    deltaTime,
+    integrate,
+
+    -- ** Random signals,
+    RNG,
+    generateRandom,
+    generateRandomRange,
+    runRNGWithIO,
+    runRNGWithGenerator,
+    generateRandomWithGenerator,
+    generateRandomRangeWithGenerator,
+
     -- * Events
-    Event,
   )
 where
+
+-- Event,
 
 import Control.Arrow
 import Reactimate.Basic
 import Reactimate.Event
+import Reactimate.Handles
 import Reactimate.Random
 import Reactimate.Run
 import Reactimate.Sampling

@@ -55,7 +55,8 @@ library
         filepath,
         hashtables,
         hashable,
-        transformers
+        transformers,
+        ttrie 
 
 executable basic-example
     import: common
@@ -97,8 +98,7 @@ executable bench
     build-depends:
         reactimate,
         reactimate-game,
-        gauge
-
+        tasty-bench
 
 test-suite reactimate-game-test
     import:           common

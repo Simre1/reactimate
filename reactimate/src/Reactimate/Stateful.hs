@@ -1,4 +1,12 @@
-module Reactimate.Stateful where
+module Reactimate.Stateful
+  ( feedback,
+    feedbackState,
+    feedbackLazyState,
+    scan,
+    sumUp,
+    delay,
+  )
+where
 
 import Reactimate.Basic
 import Reactimate.Signal
@@ -48,14 +56,6 @@ scan f initial = feedback initial (arr2 (flip f))
 sumUp :: (Num a) => Signal es a a
 sumUp = scan (+) 0
 {-# INLINE sumUp #-}
-
--- | Computes a moving mean of the input values
---
--- The first parameter @alpha@ must be in the intervall [0,1] and controls how strongly recent samples are weighted.
--- Small @alpha@ near 0 leads to slower but smoother convergence. Big @alpha@ leads to quick convergence but a jagged curve.
-movingMean :: (Fractional a) => a -> Signal es a a
-movingMean alpha = scan (\b a -> b + alpha * (a - b)) 0
-{-# INLINE movingMean #-}
 
 -- | Delay the value by one iteration
 delay :: a -> Signal es a a

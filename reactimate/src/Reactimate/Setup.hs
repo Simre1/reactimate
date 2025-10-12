@@ -1,4 +1,4 @@
-module Reactimate.Setup where
+module Reactimate.Setup (once, withSetup, bracketSetup) where
 
 import Reactimate.Signal
 
@@ -17,12 +17,14 @@ once signal = makeSignal $ do
         pure b
 {-# INLINE once #-}
 
+-- | Run a setup action and then continue with the signal.
 withSetup :: (forall s. Setup es s x) -> (x -> Signal es a b) -> Signal es a b
 withSetup setupX kont = makeSignal $ do
   x <- setupX
   unSignal (kont x)
 {-# INLINE withSetup #-}
 
+-- | Run a setup action with a finalizer and then continue with the signal. The finalizer runs when the signal is switched out.
 bracketSetup :: (forall s. (Setup es s x, x -> Setup es s ())) -> (x -> Signal es a b) -> Signal es a b
 bracketSetup aquireRelease kont = makeSignal $ do
   let (aquire, release) = aquireRelease

@@ -1,9 +1,8 @@
-module Reactimate.Basic where
+module Reactimate.Basic (dup, arr2, identity, constant, arrStep, arrIO, actionStep, actionIO) where
 
 import Control.Arrow (Arrow (..))
-import Control.Monad.IO.Class (MonadIO (liftIO))
+import Reactimate.Handles
 import Reactimate.Signal
-import Reactimate.Union
 
 -- | Duplicating the input may be useful for various other arrow combinators.
 dup :: Signal es a (a, a)
@@ -26,9 +25,12 @@ constant = pure
 {-# INLINE constant #-}
 
 -- | Run an effectful action during a signal function.
-arrStep :: (Member e es) => (forall s. e s -> a -> Step s b) -> Signal es a b
+-- Use it in combination with the 'Handle' pattern to a single effect handle.
+--
+-- @arrStep $ \(Handle myEffect) input -> ...@
+arrStep :: (Members sub es) => (forall s. Handles sub s -> a -> Step s b) -> Signal es a b
 arrStep f = makeSignal $ do
-  e <- getHandle
+  e <- getHandles
   let g = f e
   pure $ \a -> g a
 {-# INLINE arrStep #-}
@@ -41,9 +43,9 @@ arrIO f = makeSignal $ do
 {-# INLINE arrIO #-}
 
 -- | Run an effectful action during a signal function without input.
-actionStep :: (Member e es) => (forall s. e s -> Step s a) -> Signal es x a
+actionStep :: (Members sub es) => (forall s. Handles sub s -> Step s a) -> Signal es x a
 actionStep action = makeSignal $ do
-  e <- getHandle
+  e <- getHandles
   let a = action e
   pure $ \_ -> a
 {-# INLINE actionStep #-}

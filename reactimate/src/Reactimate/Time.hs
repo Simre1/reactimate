@@ -1,24 +1,26 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Reactimate.Time (Time (..), withTime, withFixedTime, interposeFixedTime, deltaTime, currentTime, integrate) where
+module Reactimate.Time (Time, withTime, withFixedTime, interposeFixedTime, deltaTime, currentTime, integrate) where
 
 import Control.Arrow
 import Control.Category (Category (id))
 import GHC.Clock (getMonotonicTime)
-import Reactimate.Basic (actionStep, arrStep)
+import Reactimate.Basic (actionStep)
+import Reactimate.Handles
 import Reactimate.Signal
 import Reactimate.Stateful (feedback)
-import Reactimate.Union
 import Prelude hiding (id)
 
--- | The 'Time' effect tells you the current time. You can either use real time with 'withTime' or fixed time steps with 'withFixedTime'.
+-- | The 'Time' effect tracks time within the simulation.
+-- It contains the total runtime as well as a delta time which is the time between executions of signal functions.
+-- You can either run it with real time ('withTime') or with fixed time steps ('withFixedTime').
 data Time s = Time
   { deltaTimeRef :: Ref s Double,
     currentTimeRef :: Ref s Double
   }
 
 -- | Gives you a 'Time' based on real data.
--- 'Time' contains the total runtime as well as a delta time which is the time between executions of signal functions.
+-- The total time relies on GHC time tracking, so time 0 is when your whole program starts and not when you run `withTime`.
 withTime :: (IOE :> es) => Signal (Time : es) a b -> Signal es a b
 withTime signal = makeSignal $ do
   dTimeRef <- newRef 0
@@ -53,27 +55,29 @@ withFixedTime fixedDelta signal = makeSignal $ do
     writeRef timeRef newTime
     (step a)
 
--- | Gives you a 'Time' based on a fixed delta. Each execution will have the same delta and the runtime
--- will be @deltaTime * runNumber@.
+-- | Interposes the `Time` effect such that the given signal believes it runs on fixed time steps,
+-- no matter what happens outside.
 interposeFixedTime :: (Time :> es) => Double -> Signal es a b -> Signal es a b
-interposeFixedTime fixedDelta signal = undefined
-
--- Signal $ withRef (-fixedDelta) $ \timeRef -> do
---   step <- unSignal signal
---   pure $ \a -> do
---     oldTime <- readRef timeRef
---     let !newTime = oldTime + fixedDelta
---     writeRef timeRef newTime
---     (step a)
+interposeFixedTime fixedDelta signal = makeSignal $ do
+  timeRef <- newRef 0
+  deltaTimeRef <- newRef fixedDelta
+  let time = Time deltaTimeRef timeRef
+  step <- replaceHandle time $ unSignal signal
+  pure $ \a -> do
+    b <- step a
+    oldTime <- readRef timeRef
+    let !newTime = oldTime + fixedDelta
+    writeRef timeRef newTime
+    pure b
 
 -- | Get the duration of the last execution which can be used to do some interpolation based on time.
 deltaTime :: (Time :> es) => Signal es x Double
-deltaTime = actionStep (\Time {deltaTimeRef} -> readRef deltaTimeRef)
+deltaTime = actionStep (\(Handle Time {deltaTimeRef}) -> readRef deltaTimeRef)
 {-# INLINE deltaTime #-}
 
 -- | Get the total runtime.
 currentTime :: (Time :> es) => Signal es x Double
-currentTime = actionStep (\Time {currentTimeRef} -> readRef currentTimeRef)
+currentTime = actionStep (\(Handle Time {currentTimeRef}) -> readRef currentTimeRef)
 {-# INLINE currentTime #-}
 
 -- | Integrate a value based on 'deltaTime'. The first parameter is the needed scalar multiplication for `a`.

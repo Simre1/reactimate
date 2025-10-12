@@ -1,21 +1,19 @@
-module Reactimate.Sampling where
+module Reactimate.Sampling (resample, resampleInThread, limitSampleRate) where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
-import Control.Concurrent.MVar
 import Control.Monad (forever, when)
-import Data.IORef
 import Data.Sequence (Seq)
 import Data.Sequence qualified as S
 import Data.Word (Word64)
 import GHC.Clock (getMonotonicTimeNSec)
-import Reactimate.Setup (bracketSetup)
+import Reactimate.Handles
 import Reactimate.Signal
 import Reactimate.Time
-import Reactimate.Union
 
--- | Resamples a Signal with the first argument as the specified @frameTime@ within the same thread. The resampled Signal will have a fixed time delta of @frameTime@.
--- The inputs and outputs are collected in a sequence.
+-- | Resamples a Signal with the first argument as the specified @frameTime@ within the same thread.
+-- The resampled Signal will have a fixed time delta of @frameTime@ and may run zero to multiple times per outer signal iteration
+-- in order to approach the desired sampling rate.
 resample :: (Time :> es) => Double -> (Signal es (Seq a) b) -> Signal es a (Seq b)
 resample frameTime signal = makeSignal $ do
   nextSampleTimeRef <- newRef 0
@@ -50,42 +48,32 @@ resample frameTime signal = makeSignal $ do
     writeRef outputRef S.empty
     pure bs
 
--- | Samples a signal function in another thread. You may want to limit sampling speed with `limitSampleRate`.
+-- | Sample a signal function in another thread at full speed. The thread is killed when the signal is switched out.
+-- You may want to limit sampling speed with `limitSampleRate`.
 resampleInThread :: (IOE :> es) => Signal es (Seq a) b -> Signal es a (Seq b)
-resampleInThread = undefined
+resampleInThread signal = makeSignal $ do
+  inputRef <- newRef S.empty
+  outputRef <- newRef S.empty
+  f <- unSignal signal
+  IOE liftIO <- getHandle
+  unlift <- unliftStep
+  let action = unlift $ do
+        inputs <- atomicModifyRef' inputRef (S.empty,)
+        output <- f inputs
+        modifyRef' outputRef (S.:|> output)
 
--- resampleInThread signal = Signal $ withRef S.empty $ \inputRef -> withRef S.empty $ \outputRef -> do
---   f <- unSignal signal
+  asyncRef <- prestep $ liftIO $ async $ forever $ action
+  finalize $ prestep $ liftIO $ cancel asyncRef
 
---   unSignal $
---     bracketSetup
---       ( liftIO $ do
---           mVar <- newEmptyMVar
---           asyncRef <- async $ forever $ do
---             unlift <- readMVar mVar
---             unlift $ do
---               inputs <- atomicModifyRef' inputRef (S.empty,)
---               output <- f inputs
---               modifyRef' outputRef (S.:|> output)
---           pure (mVar, asyncRef)
---       )
---       (liftIO . cancel . snd)
---       ( \(mVar, _) -> Signal $ do
---           pure $ \a -> do
---             -- TODO: Not sure if escaping the scope is safe ...docs do not say anything
---             unlift <- unsafeEff $ \env -> concUnliftIO env Ephemeral (Limited 1) $ \unlift -> do
---               pure unlift
---             _ <- liftIO $ swapMVar mVar unlift
-
---             modifyRef' inputRef (S.:|> a)
---             atomicModifyRef' outputRef (S.empty,)
---       )
+  pure $ \a -> do
+    modifyRef' inputRef (S.:|> a)
+    atomicModifyRef' outputRef (S.empty,)
 
 -- | Limit the real world samples per second. The first argument is samples per second.
 limitSampleRate :: (IOE :> es) => Double -> Signal es a b -> Signal es a b
-limitSampleRate frameTime' (Signal signal) = Signal $ do
+limitSampleRate frameTime' signal = makeSignal $ do
   timeRef <- newRef 0
-  f <- signal
+  f <- unSignal signal
   IOE liftIO <- getHandle
 
   pure $ \a -> do

@@ -1,17 +1,33 @@
 {-# LANGUAGE RecursiveDo #-}
 
-module Reactimate.Event where
+module Reactimate.Event (Event (..), getEvents, collectEvents, isEvent, isNoEvent, filterE) where
 
-import Control.Applicative (Alternative, liftA2)
-import Control.Arrow ((>>>))
-import Control.Concurrent
-import Control.Concurrent.Async
-import Control.Monad (forever, (>=>))
-import Data.IORef
-import Reactimate.Basic (identity)
+import Control.Arrow (Arrow (..))
 import Reactimate.Signal
 
 newtype Event a = Event [a] deriving (Functor)
+
+instance Semigroup (Event a) where
+  (Event ev1) <> (Event ev2) = Event (ev1 <> ev2)
+
+instance Monoid (Event a) where
+  mempty = Event []
+
+collectEvents :: (Monoid a) => Signal es (Event a) a
+collectEvents = arr $ \(Event es) -> mconcat es
+
+getEvents :: Event a -> [a]
+getEvents (Event events) = events
+
+isEvent :: Event a -> Bool
+isEvent (Event []) = False
+isEvent _ = True
+
+isNoEvent :: Event a -> Bool
+isNoEvent = not . isEvent
+
+filterE :: (a -> Bool) -> Event a -> Event a
+filterE f (Event events) = Event $ filter f events
 
 -- -- | Events are like @Signal () a@, they produce values of @a@ and require no input.
 -- -- Events occure at some unknown time, so they cannot simply be sampled with run functions like 'reactimate'.

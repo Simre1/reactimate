@@ -34,9 +34,8 @@ library
         Reactimate.Setup,
         Reactimate.Basic,
         Reactimate.Event,
-        Reactimate.Delay,
         Reactimate.Random,
-        Reactimate.Union
+        Reactimate.Handles
     hs-source-dirs:   src
     ghc-options: -O2
     build-depends: 
