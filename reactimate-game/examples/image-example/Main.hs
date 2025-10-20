@@ -1,3 +1,4 @@
+import Data.Bool
 import Data.Text (Text, pack)
 import Reactimate
 import Reactimate.Game
@@ -9,14 +10,16 @@ main = do
   args <- getArgs
   case args of
     [imagePath] ->
-      reactimate $
-        setupGame (GameConfig (pack "Image Example") defaultWindow 60) $ \gameEnv ->
-          game gameEnv (pack imagePath) >>> renderGame gameEnv >>> constant Nothing
+      runSetup $
+        reactimate $
+          runGame (pack "Image Example") defaultWindow 60 $
+            runAssets $
+              game (pack imagePath) >>> renderGame >>> bool Nothing (Just ()) <$> gameShouldQuit
     _ -> putStrLn "Run this example with the image path as the argument"
   pure ()
 
-game :: GameEnv -> Text -> Signal () (Camera, Picture)
-game gameEnv imagePath = withImage gameEnv imagePath $ \image ->
+game :: (Graphics :> es, IOE :> es, Assets :> es) => Text -> Signal es () (Camera, Picture)
+game imagePath = withImage imagePath $ \image ->
   constant 0.01
     >>> sumUp
     >>> arr

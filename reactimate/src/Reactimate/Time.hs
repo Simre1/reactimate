@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Reactimate.Time (Time, withTime, withFixedTime, interposeFixedTime, deltaTime, currentTime, integrate) where
+module Reactimate.Time (Time, withTime, withFixedTime, interposeFixedTime, makeTimeHandle, deltaTime, currentTime, integrate) where
 
 import Control.Arrow
 import Control.Category (Category (id))
@@ -18,6 +18,15 @@ data Time s = Time
   { deltaTimeRef :: Ref s Double,
     currentTimeRef :: Ref s Double
   }
+
+-- | Create a time handle from references. You need to update the references yourself, so you can implement any time progression.
+makeTimeHandle ::
+  -- | Delta time
+  Ref s Double ->
+  -- | Current time relative to some fixed point in the past (e.g. relative to program startup)
+  Ref s Double ->
+  Time s
+makeTimeHandle = Time
 
 -- | Gives you a 'Time' based on real data.
 -- The total time relies on GHC time tracking, so time 0 is when your whole program starts and not when you run `withTime`.

@@ -1,29 +1,28 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+import Control.Monad
 import Data.Colour.Names (red)
 import Data.Colour.SRGB (sRGB24)
-import Data.Foldable (toList)
 import Data.List (group)
-import Data.Vector.Storable qualified as VS
 import Reactimate
 import Reactimate.Game
 import SDL qualified
-import Control.Monad
 
-gameConfig :: GameConfig
-gameConfig =
-  GameConfig
-    { name = "Snake",
-      window = defaultWindow {windowInitialSize = fromIntegral . (* 30) <$> gameBounds},
-      fps = 11
-    }
+name = "Snake"
+
+window = defaultWindow {windowInitialSize = fromIntegral . (* 30) <$> gameBounds}
+
+fps = 11
 
 main :: IO ()
-main = reactimate $ setupGame gameConfig $ \gameEnv ->
-  captureInput gameEnv >>> (feedback initialGameState stepGame >>> render gameEnv) &&& shouldQuit >>> arr snd
+main =
+  runSetup $
+    reactimate $
+      runGame name window fps $
+        captureInput >>> (feedback initialGameState stepGame >>> render) &&& shouldQuit >>> arr snd
 
-data Input = MoveLeft | MoveRight | MoveUp | MoveDown | NoAction | Quit deriving (Eq, Ord, Show)
+data GameInput = MoveLeft | MoveRight | MoveUp | MoveDown | NoAction | Quit deriving (Eq, Ord, Show)
 
 data GameState = GameState
   { snake :: [V2 Int],
@@ -33,9 +32,10 @@ data GameState = GameState
     score :: Int
   }
 
-captureInput :: GameEnv -> Signal () Input
-captureInput gameEnv =
-  sampleEvent collectInput [] (inputEvents gameEnv)
+captureInput :: (Input :> es) => Signal es () GameInput
+captureInput =
+  inputEvents
+    >>> arr (foldl' collectInput [])
     >>> feedback [] (arr $ \(newActions, oldActions) -> fmap head $ group $ drop 1 oldActions ++ newActions)
     >>> arr
       ( \case
@@ -70,33 +70,34 @@ initialGameState =
 gameBounds :: V2 Int
 gameBounds = V2 32 18
 
-stepGame :: Signal (Input, GameState) GameState
+stepGame :: (IOE :> es) => Signal es (GameInput, GameState) GameState
 stepGame =
-  generateRandomRange (V2 1 1, gameBounds - V2 2 2)
-    &&& identity
-    >>> arrIO
-      ( \(rngV2, (input, GameState snake direction food running score)) ->
-          if running
-            then
-              let nextDirection = adaptDirection input direction
-                  nextHead = nextDirection + head snake
-                  snakeEats = Just nextHead == food
-                  nextSnake =
-                    if snakeEats || length snake == 1
-                      then nextHead : snake
-                      else nextHead : init snake
-                  nextFood = if snakeEats then Just rngV2 else food
-                  nextScore = if snakeEats then score + 1 else score
-               in if isDead nextSnake
-                    then do
-                      putStrLn $ "Score: " ++ show score
-                      pure $ GameState nextSnake nextDirection nextFood False nextScore
-                    else pure $ GameState nextSnake nextDirection nextFood True nextScore
-            else
-              if shouldStartGame input
-                then pure $ initialGameState {running = True}
-                else pure $ GameState snake direction food False score
-      )
+  runRNGWithIO $
+    generateRandomRange (V2 1 1, gameBounds - V2 2 2)
+      &&& identity
+      >>> arrIO
+        ( \(rngV2, (input, GameState snake direction food running score)) ->
+            if running
+              then
+                let nextDirection = adaptDirection input direction
+                    nextHead = nextDirection + head snake
+                    snakeEats = Just nextHead == food
+                    nextSnake =
+                      if snakeEats || length snake == 1
+                        then nextHead : snake
+                        else nextHead : init snake
+                    nextFood = if snakeEats then Just rngV2 else food
+                    nextScore = if snakeEats then score + 1 else score
+                 in if isDead nextSnake
+                      then do
+                        putStrLn $ "Score: " ++ show score
+                        pure $ GameState nextSnake nextDirection nextFood False nextScore
+                      else pure $ GameState nextSnake nextDirection nextFood True nextScore
+              else
+                if shouldStartGame input
+                  then pure $ initialGameState {running = True}
+                  else pure $ GameState snake direction food False score
+        )
   where
     shouldStartGame i = case i of
       MoveLeft -> True
@@ -117,8 +118,8 @@ stepGame =
             _ -> d
        in if wantedDirection + d == V2 0 0 then d else wantedDirection
 
-render :: GameEnv -> Signal GameState ()
-render gameEnv = arr (\gs -> (camera, gameStatePicture gs)) >>> renderGame gameEnv
+render :: (Graphics :> es) => Signal es GameState ()
+render = arr (\gs -> (camera, gameStatePicture gs)) >>> renderGame
   where
     gameStatePicture (GameState snake _ food _ _) = makePicture 0 $ do
       zipWithM_ snakeShape [0 ..] snake
@@ -129,5 +130,5 @@ render gameEnv = arr (\gs -> (camera, gameStatePicture gs)) >>> renderGame gameE
     drawFood = maybe mempty $ \pos -> drawRectangle (packColour red) (Rectangle pos (V2 1 1))
     camera = Camera (V2 0 0) gameBounds
 
-shouldQuit :: Signal Input (Maybe ())
+shouldQuit :: Signal es GameInput (Maybe ())
 shouldQuit = arr $ \i -> if i == Quit then Just () else Nothing

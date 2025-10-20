@@ -1,6 +1,6 @@
 {-# LANGUAGE RecursiveDo #-}
 
-module Reactimate.Event (Event (..), getEvents, collectEvents, isEvent, isNoEvent, filterE) where
+module Reactimate.Event (Event (..), getEvents, isEvent, isNoEvent, filterE) where
 
 import Control.Arrow (Arrow (..))
 import Reactimate.Signal
@@ -13,8 +13,11 @@ instance Semigroup (Event a) where
 instance Monoid (Event a) where
   mempty = Event []
 
-collectEvents :: (Monoid a) => Signal es (Event a) a
-collectEvents = arr $ \(Event es) -> mconcat es
+instance Foldable Event where
+  foldMap f = foldMap f . getEvents
+
+instance Traversable Event where
+  traverse f = fmap Event . traverse f . getEvents
 
 getEvents :: Event a -> [a]
 getEvents (Event events) = events

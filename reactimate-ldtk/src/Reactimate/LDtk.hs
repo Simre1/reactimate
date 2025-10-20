@@ -22,6 +22,7 @@ module Reactimate.LDtk
 where
 
 import Control.Applicative
+import Control.Monad.IO.Class
 import Data.Foldable
 import Data.Map qualified as M
 import Data.Maybe (fromMaybe)
@@ -33,19 +34,22 @@ import Reactimate.Game (V2 (..))
 -- import QuickType
 
 -- | Load an `LDtk` file in the setup phase.
-withLDtkRoot :: FilePath -> (LDtkRoot -> Signal a b) -> Signal a b
+withLDtkRoot :: (IOE :> es) => FilePath -> (LDtkRoot -> Signal es a b) -> Signal es a b
 withLDtkRoot filepath =
   withSetup
     ( do
-        maybeRoot <- loadLDtk filepath
+        maybeRoot <- liftIO $ loadLDtk filepath
         either fail pure maybeRoot
     )
 
 type LevelName = Text
 
 -- | Switch to different `Level`s based on their name
-withLevel :: LDtkRoot -> LevelName -> (Level -> Signal a (b, Maybe LevelName)) -> Signal a b
-withLevel ldtkRoot initialLevel makeSignal = switchRepeatedly (makeSignal $ levels' M.! initialLevel) (makeSignal . (levels' M.!))
+withLevel :: LDtkRoot -> LevelName -> (Level -> Signal es a (b, Maybe LevelName)) -> Signal es a b
+withLevel ldtkRoot initialLevel makeSignal =
+  rSwitch
+    (makeSignal $ levels' M.! initialLevel)
+    (makeSignal . (levels' M.!))
   where
     allLevels = ldtkRoot.levels ++ (ldtkRoot.worlds >>= (.levels))
     levels' = M.fromList $ zip ((.identifier) <$> allLevels) allLevels

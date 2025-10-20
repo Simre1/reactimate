@@ -1,25 +1,33 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Reactimate.Game.Graphics
-  ( renderGame,
+  ( -- * Graphics effect
+    Graphics,
+    runGraphics,
+    SDL.WindowConfig (..),
+    SDL.defaultWindow,
+    getWindowSize,
+    getRenderer,
+
+    -- * Rendering
+    renderGame,
     Camera (..),
 
-    -- * Picture
+    -- ** Picture
     Picture,
     makePicture,
     staticPicture,
-
-    -- ** Image projections
-    translatePicture,
-    rotatePicture,
-    projectPicture,
-
-    -- * Rendering
     drawRectangle,
     drawPolygon,
     blitImage,
     Blit (..),
+
+    -- *** Image projections
+    translatePicture,
+    rotatePicture,
+    projectPicture,
 
     -- ** Colours
     packColour,
@@ -39,7 +47,6 @@ import Data.Colour
 import Data.Colour.SRGB (RGB (..), toSRGB24)
 import Data.Foldable (toList)
 import Data.Hashable (Hashable (..))
-import Data.Hashable.Generic (genericHashWithSalt)
 import Data.IntMap.Strict qualified as IM
 import Data.Sequence qualified as S
 import Data.Text (Text, unpack)
@@ -51,9 +58,8 @@ import Foreign.Ptr
 import GHC.Generics (Generic)
 import Linear.V2
 import Linear.V4
-import Reactimate (Signal, arrIO, once)
-import Reactimate.Game.Assets (Asset (..), withAsset)
-import Reactimate.Game.Environment (GameEnv (..))
+import Reactimate
+import Reactimate.Game.Assets (Asset (..), Assets, withAssetNow)
 import Reactimate.Game.Projection2D
 import Reactimate.Game.Shapes
 import SDL qualified
@@ -61,11 +67,46 @@ import SDL.Image qualified as SDL
 import SDL.Primitive qualified as SDL
 import SDL.Raw.Types qualified as SDLRaw
 
+data Graphics s = Graphics
+  { window :: SDL.Window,
+    renderer :: SDL.Renderer,
+    ioe :: IOE s
+  }
+
+runGraphics ::
+  (IOE :> es) =>
+  -- | Window name
+  Text ->
+  SDL.WindowConfig ->
+  Signal (Graphics : es) a b ->
+  Signal es a b
+runGraphics name initialWindowConfig signal = makeSignal $ do
+  SDL.initializeAll
+  window <- SDL.createWindow name initialWindowConfig
+  finalize $ SDL.destroyWindow window
+
+  renderer <- SDL.createRenderer window (-1) SDL.defaultRenderer
+  finalize $ SDL.destroyRenderer renderer
+
+  ioe <- getHandle
+
+  let graphics = Graphics {window, renderer, ioe}
+  runHandle graphics (unSignal signal)
+
+getWindowSize :: Graphics s -> Step s (V2 Int)
+getWindowSize (Graphics window _ (IOE lift)) =
+  lift $ fmap fromIntegral <$> SDL.get (SDL.windowSize window)
+
+getRenderer :: Graphics s -> Step s (SDL.Renderer)
+getRenderer (Graphics _ renderer _) = pure renderer
+
+getWindow :: Graphics s -> Step s (SDL.Window)
+getWindow (Graphics window _ _) = pure window
+
 -- | Renders the given `Picture` with the `Camera` each frame.
-renderGame :: GameEnv -> Signal (Camera, Picture) ()
-renderGame gameEnv =
-  arrIO $
-    uncurry (renderScreen gameEnv.window gameEnv.renderer)
+renderGame :: (Graphics :> es) => Signal es (Camera, Picture) ()
+renderGame =
+  arrStep $ \(Handle (Graphics window renderer (IOE lift))) -> lift . uncurry (renderScreen window renderer)
 {-# INLINE renderGame #-}
 
 -- | A `Picture` is a collection of `PictureAtoms`. `Picture` implements `Semigroup`,
@@ -99,12 +140,6 @@ instance Semigroup PicturePart where
   pp1 <> pp2@(PictureRender _) = pp1 <> PicturePart idProjection (S.singleton pp2)
   pp1@(PictureRender _) <> pp2 = PicturePart idProjection (S.singleton pp1) <> pp2
 
--- | `PictureAtoms` are the building blocks of `Picture`s.
--- data PictureAtoms
---   = BasicShapes !(VS.Vector (ColouredShape BasicShape))
---   | Texture !Image !(VS.Vector Blit)
---   deriving (Eq)
-
 -- | A `Blit` contains source and target rectangles. They are used to copy
 -- parts of some source texture onto a target texture. For `PictureAtoms`, the target is the screen.
 data Blit = Blit
@@ -137,7 +172,7 @@ makePicture zIndex action =
 
 -- | Creates the `Picture` once and then reuses it in all subsequenct renders. If you have some static content,
 -- use this function to save some computation time.
-staticPicture :: Signal a Picture -> Signal a Picture
+staticPicture :: Signal es a Picture -> Signal es a Picture
 staticPicture = once
 
 -- | Pack an `AlphaColour` so that it can be used for `PictureAtoms`. Include the /colour/ package to make colours!
@@ -173,7 +208,7 @@ renderPicture :: RenderContext -> Projection2D Int -> Picture -> IO ()
 renderPicture rc projection (Picture pictureParts) = forM_ pictureParts $ \picturePart -> renderPicturePart rc projection picturePart
 
 renderPicturePart :: RenderContext -> Projection2D Int -> PicturePart -> IO ()
-renderPicturePart rc projection1 (PicturePart projection2 nestedParts) = forM_ nestedParts $ renderPicturePart rc (projection1 *** projection2)
+renderPicturePart rc projection1 (PicturePart projection2 nestedParts) = forM_ nestedParts $ renderPicturePart rc (projection1 *+* projection2)
 renderPicturePart rc projection (PictureRender (Render f)) =
   f rc projection
 
@@ -233,14 +268,14 @@ translatePicture v (Picture parts) = Picture $ IM.map translatePicturePart parts
 rotatePicture :: Float -> Picture -> Picture
 rotatePicture r (Picture parts) = Picture $ IM.map translatePicturePart parts
   where
-    translatePicturePart (PicturePart projection parts) = PicturePart (approximateRotation r *** projection) parts
+    translatePicturePart (PicturePart projection parts) = PicturePart (approximateRotation r *+* projection) parts
     translatePicturePart (PictureRender render) = PicturePart (approximateRotation r) $ S.fromList [PictureRender render]
 
 -- | Apply a homogenous projection to the picture. A projection can translate, rotate, reflect or skew a picture.
 projectPicture :: Projection2D Int -> Picture -> Picture
 projectPicture projection (Picture parts) = Picture $ IM.map projectPicturePart parts
   where
-    projectPicturePart (PicturePart innerProjection parts) = PicturePart (projection *** innerProjection) parts
+    projectPicturePart (PicturePart innerProjection parts) = PicturePart (projection *+* innerProjection) parts
     projectPicturePart (PictureRender render) = PicturePart projection $ S.fromList [PictureRender render]
 
 computeCameraProjection :: V2 Int -> Camera -> Projection2D Int
@@ -248,15 +283,12 @@ computeCameraProjection (V2 wx wy) (Camera (V2 cx cy) (V2 vx vy)) =
   zeroProjection {p00 = vx * vy, p11 = wx * vy, p22 = -wy * vx, p10 = -cx * wx * vy, p20 = vx * wy * (vy + cy)}
 
 data ImagePath = ImagePath
-  { renderer :: !SDL.Renderer,
-    path :: !Text
+  { path :: !Text
   }
   deriving (Eq, Show, Ord, Generic)
 
 instance Hashable ImagePath where
-  hashWithSalt i (ImagePath renderer path) =
-    let i' = genericHashWithSalt i renderer
-     in hashWithSalt i' path
+  hashWithSalt i (ImagePath path) = hashWithSalt i path
 
 -- | An `Image` contains the GPU texture of the image so that it can be used
 -- for rendering
@@ -268,8 +300,8 @@ data Image = Image
 
 instance Asset ImagePath where
   type AssetValue ImagePath = Image
-  type AssetEnv ImagePath = ()
-  loadAsset () (ImagePath renderer path) = do
+  type AssetEffects ImagePath = '[Graphics]
+  loadAsset (Handle (Graphics _ renderer (IOE lift))) (ImagePath path) = lift $ do
     texture <- SDL.loadTexture renderer $ unpack path
     textureInfo <- SDL.queryTexture texture
     pure $ Image texture $ fromIntegral <$> V2 textureInfo.textureWidth textureInfo.textureHeight
@@ -277,8 +309,8 @@ instance Asset ImagePath where
     SDL.destroyTexture image.texture
 
 -- | Load an image from the given path during the setup phase such that you can use it for rendering
-withImage :: GameEnv -> Text -> (Image -> Signal a b) -> Signal a b
-withImage gameEnv path = withAsset gameEnv.assets () (ImagePath gameEnv.renderer path)
+withImage :: (Graphics :> es, IOE :> es, Assets :> es) => Text -> (Image -> Signal es a b) -> Signal es a b
+withImage path = withAssetNow (ImagePath path)
 
 newtype Render a = Render (RenderContext -> Projection2D Int -> IO a)
   deriving (Functor, Semigroup, Monoid)

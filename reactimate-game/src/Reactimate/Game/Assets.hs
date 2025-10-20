@@ -4,7 +4,17 @@
 {-# LANGUAGE TypeAbstractions #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Reactimate.Game.Assets where
+module Reactimate.Game.Assets
+  ( Assets,
+    runAssets,
+    Asset (..),
+    getAssetNow,
+    withAssetNow,
+    getAsset,
+    AssetHandle (..),
+    lookupAssetHandle,
+  )
+where
 
 import Control.Concurrent.STM.Map qualified as STMMap
 import Control.Exception.Base
@@ -19,7 +29,7 @@ import System.Mem.Weak
 import Type.Reflection
 import Unsafe.Coerce
 
--- | `Assets` holds references to your loaded assets (e.g. images)
+-- | With the `Assets` effect, you can load in any assets which implement `Asset`. It can load assets asynchronously and stores your loaded assets.
 data Assets s = Assets
   { store :: STMMap.Map SuperKey (Weak (AssetValue Any))
   }
@@ -41,6 +51,7 @@ instance Hashable SuperKey where
 makeAssets :: IO (Assets s)
 makeAssets = Assets <$> atomically (STMMap.empty)
 
+-- The typeclass which defines how to load/unload assets
 class (Hashable key, Typeable key) => Asset key where
   -- | The asset you want to load. The key determines the type of the asset.
   type AssetValue key
@@ -51,13 +62,19 @@ class (Hashable key, Typeable key) => Asset key where
   -- | Load an asset with the asset environment and the key.
   loadAsset :: Handles (AssetEffects key) s -> key -> Step s (AssetValue key)
 
-  -- | Free the asset after no one uses it anymore. It is not safe to use effects here!
+  -- | Free the asset after no one uses it anymore. It is not safe to use effects here, so you do not get any effect handles!
   freeAsset :: key -> AssetValue key -> IO ()
 
-data AssetHandle key = AssetHandle (IO (Maybe (AssetValue key)))
+-- | Load an asset immediately
+withAssetNow :: (Members (AssetEffects key) es, IOE :> es, Asset key, Assets :> es) => key -> (AssetValue key -> Signal es a b) -> Signal es a b
+withAssetNow key f = makeSignal $ do
+  asset <- getAssetNow key
+  unSignal (f asset)
 
-getAsset :: (Assets :> es, IOE :> es, Asset key, Members (AssetEffects key) es) => key -> Setup es s (AssetValue key)
-getAsset key = do
+-- | Gets an action immediately in the `Setup` phase. This can noticably delay your game startup if it takes a long time!
+-- This asset is GCed.
+getAssetNow :: (Assets :> es, IOE :> es, Asset key, Members (AssetEffects key) es) => key -> Setup es s (AssetValue key)
+getAssetNow key = do
   Assets store <- getHandle
   let superKey = SuperKey typeRep key
   maybeAsset <- liftIO $ do
@@ -78,11 +95,17 @@ getAsset key = do
 
       pure asset
 
-lazyGetAsset ::
+newtype AssetHandle s key = AssetHandle (Step s (Maybe (AssetValue key)))
+
+lookupAssetHandle :: AssetHandle s key -> Step s (Maybe (AssetValue key))
+lookupAssetHandle (AssetHandle step) = step
+
+-- | Gets a handle for the asset value, which is loaded in asynchronously and will eventually be available. This asset is GCed.
+getAsset ::
   (Assets :> es, IOE :> es, Asset key, Members (AssetEffects key) es) =>
   key ->
-  Setup es s (Step s (Maybe (AssetValue key)))
-lazyGetAsset key = do
+  Setup es s (AssetHandle s key)
+getAsset key = do
   Assets store <- getHandle
   let superKey = SuperKey typeRep key
   maybeAsset <- liftIO $ do
@@ -107,7 +130,7 @@ lazyGetAsset key = do
         lift $ atomically $ STMMap.insert superKey (unsafeCoerce weakAsset) store
         writeRef assetRef (Just asset)
 
-      pure $ readRef assetRef
+      pure $ AssetHandle $ readRef assetRef
 
 cleanUpAsset ::
   (Asset key) =>
@@ -130,6 +153,7 @@ cleanUpAsset store superKey key asset =
 scheduleLoad :: IO () -> IO ()
 scheduleLoad io = io
 
+-- Runs the `Assets` effect by setting up an asset store.
 runAssets :: (IOE :> es) => Signal (Assets : es) a b -> Signal es a b
 runAssets = mapEffects $ \setup -> do
   assets@(Assets store) <- liftIO makeAssets
@@ -141,7 +165,7 @@ runAssets = mapEffects $ \setup -> do
       (superKey@(SuperKey @key rep key), weakAsset) -> do
         maybeAsset <- liftIO $ deRefWeak weakAsset
         case maybeAsset of
-          Just asset -> prestep $ lift $ cleanUpAsset store superKey key (unsafeCoerce asset)
+          Just asset -> cleanUpAsset store superKey key (unsafeCoerce asset)
           Nothing -> pure ()
     pure ()
   pure setup'

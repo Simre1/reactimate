@@ -63,7 +63,7 @@ resampleInThread signal = makeSignal $ do
         modifyRef' outputRef (S.:|> output)
 
   asyncRef <- prestep $ liftIO $ async $ forever $ action
-  finalize $ prestep $ liftIO $ cancel asyncRef
+  finalize $ cancel asyncRef
 
   pure $ \a -> do
     modifyRef' inputRef (S.:|> a)

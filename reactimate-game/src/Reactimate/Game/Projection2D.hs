@@ -4,15 +4,15 @@ import Linear (V2)
 import Linear.V2 (V2 (..))
 
 data Projection2D a = Projection2D
-  { p00 :: {-# UNPACK #-} !a,
-    p01 :: {-# UNPACK #-} !a,
-    p02 :: {-# UNPACK #-} !a,
-    p10 :: {-# UNPACK #-} !a,
-    p11 :: {-# UNPACK #-} !a,
-    p12 :: {-# UNPACK #-} !a,
-    p20 :: {-# UNPACK #-} !a,
-    p21 :: {-# UNPACK #-} !a,
-    p22 :: {-# UNPACK #-} !a
+  { p00 :: !a,
+    p01 :: !a,
+    p02 :: !a,
+    p10 :: !a,
+    p11 :: !a,
+    p12 :: !a,
+    p20 :: !a,
+    p21 :: !a,
+    p22 :: !a
   }
   deriving (Eq, Show)
 
@@ -31,9 +31,9 @@ combineProjection p1 p2 =
     }
 {-# INLINE combineProjection #-}
 
-(***) :: (Num a) => Projection2D a -> Projection2D a -> Projection2D a
-(***) = combineProjection
-{-# INLINE (***) #-}
+(*+*) :: (Num a) => Projection2D a -> Projection2D a -> Projection2D a
+(*+*) = combineProjection
+{-# INLINE (*+*) #-}
 
 zeroProjection :: (Num a) => Projection2D a
 zeroProjection =
@@ -95,23 +95,23 @@ approximateRotation r =
 rotateAtCenter :: (Floating a) => a -> Projection2D a -> Projection2D a
 rotateAtCenter r projection =
   let (V2 x y) = V2 projection.p10 projection.p20
-   in (rotation r *** projection {p10 = 0, p20 = 0}) {p10 = x, p20 = y}
+   in (rotation r *+* projection {p10 = 0, p20 = 0}) {p10 = x, p20 = y}
 {-# INLINE rotateAtCenter #-}
 
 approximatelyRotateAtCenter :: (Integral a, Floating b, RealFrac b) => b -> Projection2D a -> Projection2D a
 approximatelyRotateAtCenter r projection =
   let (V2 x y) = V2 projection.p10 projection.p20
-   in (approximateRotation r *** projection {p10 = 0, p20 = 0}) {p10 = x * 360, p20 = y * 360}
+   in (approximateRotation r *+* projection {p10 = 0, p20 = 0}) {p10 = x * 360, p20 = y * 360}
 {-# INLINE approximatelyRotateAtCenter #-}
 
 rotationAround :: (Floating a) => a -> V2 a -> Projection2D a
 rotationAround r (V2 x y) =
-  translation (V2 x y) *** rotation r *** translation (-V2 x y)
+  translation (V2 x y) *+* rotation r *+* translation (-V2 x y)
 {-# INLINE rotationAround #-}
 
 approximateRotationAround :: (Floating a, Integral b, RealFrac a) => a -> V2 b -> Projection2D b
 approximateRotationAround r (V2 x y) =
-  translation (V2 x y) *** approximateRotation r *** translation (-V2 x y)
+  translation (V2 x y) *+* approximateRotation r *+* translation (-V2 x y)
 {-# INLINE approximateRotationAround #-}
 
 applyProjection :: (Num a) => (a -> a -> a) -> Projection2D a -> V2 a -> V2 a

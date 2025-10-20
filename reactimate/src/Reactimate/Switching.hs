@@ -37,8 +37,8 @@ manyCaseOf deciderSignal kontSignal = makeSignal $ do
 
 -- | Add a signal input for switching. If you feed in a new signal function, it will become active immediately and not run the old one.
 -- After a `Signal` has been switched out, it's outputs might be corrupted due to resource cleanup.
-rSwitch :: Signal es a b -> Signal es (Maybe (Signal es a b), a) b
-rSwitch initial = makeSignal $ do
+iSwitch :: Signal es a b -> Signal es (Maybe (Signal es a b), a) b
+iSwitch initial = makeSignal $ do
   switchPoint <- newSwitch (unSignal initial)
   pure $
     ( \(maybeNewSignal, a) -> do
@@ -48,10 +48,10 @@ rSwitch initial = makeSignal $ do
             updateSwitch switchPoint (unSignal newSignal)
         runSwitch switchPoint a
     )
-{-# INLINE rSwitch #-}
+{-# INLINE iSwitch #-}
 
 -- | Switch out a signal function with another when you produce a @Just c@ value once. Be aware that each use of 'switch' has a small incremental cost. So if you switch often, use something like 'rSwitch' .
--- The next signal function will become active instantly. After a `Signal` has been switched out, it's outputs might be corrupted.
+-- The next signal function will become active on the next iteration. After a `Signal` has been switched out, it's outputs might be corrupted.
 switch :: Signal es a (b, Maybe c) -> (c -> Signal es a b) -> Signal es a b
 switch signal kont = makeSignal $ mdo
   let initialSignal = do
@@ -65,6 +65,32 @@ switch signal kont = makeSignal $ mdo
           pure b
   switchPoint <- newSwitch initialSignal
   pure (runSwitch switchPoint)
+
+-- | Switch out a signal function with another when you produce a @Just c@ value. The new signal function can once again switch to another one.
+-- The next signal function will become active on the next iteration. After a `Signal` has been switched out, it's outputs might be corrupted.
+rSwitch :: Signal es a (b, Maybe c) -> (c -> Signal es a (b, Maybe c)) -> Signal es a b
+rSwitch signal kont = makeSignal $ mdo
+  let initialSignal = do
+        f <- unSignal signal
+        pure $ \a -> do
+          (b, mc) <- f a
+          case mc of
+            Nothing -> pure ()
+            Just c -> do
+              updateSwitch switchPoint $ make (kont c)
+          pure b
+      make next = do
+        f <- unSignal next
+        pure $ \a -> do
+          (b, mc) <- f a
+          case mc of
+            Nothing -> pure ()
+            Just c -> do
+              updateSwitch switchPoint $ make $ kont c
+          pure b
+  switchPoint <- newSwitch initialSignal
+  pure (runSwitch switchPoint)
+{-# INLINE rSwitch #-}
 
 problematic :: (IOE :> es) => Int -> Signal es Int Int
 problematic threshold =

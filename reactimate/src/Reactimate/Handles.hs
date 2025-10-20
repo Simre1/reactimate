@@ -23,6 +23,8 @@ data Handles (xs :: [Type -> Type]) s where
 pattern (:->) :: x s -> Handles xs s -> Handles (x : xs) s
 pattern (:->) a b = ConsHandle a b
 
+{-# COMPLETE (:->) #-}
+
 -- | Match a single effect handle
 pattern Handle :: x s -> Handles '[x] s
 pattern Handle a = ConsHandle a NoHandles

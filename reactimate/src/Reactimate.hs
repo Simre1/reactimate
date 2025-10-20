@@ -19,7 +19,9 @@ module Reactimate
     constant,
     arr,
     arr2,
+    arrStep,
     arrIO,
+    actionStep,
     actionIO,
     dup,
 
@@ -34,6 +36,7 @@ module Reactimate
     (+++),
     left,
     right,
+    once,
     withSetup,
     bracketSetup,
 
@@ -105,6 +108,11 @@ module Reactimate
     generateRandomRangeWithGenerator,
 
     -- * Events
+    Event (..),
+    getEvents,
+    isEvent,
+    isNoEvent,
+    filterE,
   )
 where
 

@@ -3,18 +3,18 @@
 
 import Data.Bool (bool)
 import Data.Colour.Names
-import Data.Vector.Storable qualified as VS
 import Reactimate
 import Reactimate.Game
 
 main :: IO ()
-main = reactimate $ setupGame (GameConfig "Mouse example" defaultWindow 60) $ \gameEnv ->
-  constant camera
-    >>> mousePosition gameEnv
-    >>> game
-    >>> renderGame gameEnv
-    >>> bool Nothing (Just ())
-    <$> sampleBehavior (gameShouldQuit gameEnv)
+main =
+  runSetup $
+    reactimate $
+      runGame "Mouse example" defaultWindow 60 $
+        game
+          >>> renderGame
+          >>> bool Nothing (Just ())
+          <$> gameShouldQuit
 
 camera :: Camera
 camera = Camera (V2 0 0) (V2 800 600)
@@ -25,5 +25,5 @@ picture pos =
     drawRectangle (packColour blue) $
       Rectangle pos (V2 100 100)
 
-game :: Signal (V2 Int) (Camera, Picture)
-game = arr $ \pos -> (camera, picture pos)
+game :: (Input :> es) => Signal es () (Camera, Picture)
+game = constant camera >>> mousePosition >>> arr (\pos -> (camera, picture pos))

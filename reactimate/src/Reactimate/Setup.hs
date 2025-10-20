@@ -1,5 +1,6 @@
 module Reactimate.Setup (once, withSetup, bracketSetup) where
 
+import Reactimate.Handles
 import Reactimate.Signal
 
 -- | Evaluate the signal once and then return its result
@@ -25,7 +26,7 @@ withSetup setupX kont = makeSignal $ do
 {-# INLINE withSetup #-}
 
 -- | Run a setup action with a finalizer and then continue with the signal. The finalizer runs when the signal is switched out.
-bracketSetup :: (forall s. (Setup es s x, x -> Setup es s ())) -> (x -> Signal es a b) -> Signal es a b
+bracketSetup :: (IOE :> es) => (forall s. (Setup es s x, x -> IO ())) -> (x -> Signal es a b) -> Signal es a b
 bracketSetup aquireRelease kont = makeSignal $ do
   let (aquire, release) = aquireRelease
   x <- aquire

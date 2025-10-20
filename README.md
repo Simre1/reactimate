@@ -1,7 +1,6 @@
 # Reactimate
 
-[reactimate](reactimate) is a library implementing the AFRP paradigm. In contrast to other libraries, `reactimate` uses `IO` effects to increase performance and a concrete base type to eliminate typeclass performance problems.
-In addition, `reactimate` has some support for pull-based FRP, making it possible to deal with events which happen in-between simulation cycles.
+[reactimate](reactimate) is a library implementing the AFRP paradigm. In contrast to other libraries, `reactimate` has a static representation for signals to increase performance and a concrete base type to eliminate typeclass performance problems.
 
 # Reactimate Game
 

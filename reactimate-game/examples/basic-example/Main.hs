@@ -11,11 +11,12 @@ import Reactimate.Stateful (sumUp)
 
 main :: IO ()
 main =
-  reactimate $
-    setupGame (GameConfig "Basic Example" defaultWindow 60) $ \gameEnv ->
-      game >>> renderGame gameEnv >>> bool Nothing (Just ()) <$> sampleBehavior (gameShouldQuit gameEnv)
+  runSetup $
+    reactimate $
+      runGame "Basic Example" defaultWindow 60 $
+        game >>> renderGame >>> bool Nothing (Just ()) <$> gameShouldQuit
 
-game :: Signal () (Camera, Picture)
+game :: Signal es () (Camera, Picture)
 game = constant 0.01 >>> sumUp >>> arr (\x -> (camera, shapes x))
 
 shapes :: Float -> Picture

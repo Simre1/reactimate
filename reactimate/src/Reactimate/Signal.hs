@@ -189,9 +189,9 @@ getHandles :: (Members sub es) => Setup es s (Handles sub s)
 getHandles = Setup $ \Context {handles} -> pure $ getMembers handles
 
 -- | Register an action for finalization. Finalization happens when a signal gets switched out or the whole simulation terminates.
-finalize :: Setup es s () -> Setup es s ()
-finalize release = Setup $ \ctx@Context {finalizer} ->
-  addFinalizer finalizer $ unSetup release ctx
+finalize :: (IOE :> es) => IO () -> Setup es s ()
+finalize release = Setup $ \Context {finalizer} ->
+  addFinalizer finalizer $ release
 {-# INLINE finalize #-}
 
 -- | A mutable reference which can be used to persist state over iterations. This is based on 'IORef', so not necessarily thread-safe.
