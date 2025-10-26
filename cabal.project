@@ -1,3 +1,4 @@
 packages: reactimate, reactimate-game, reactimate-ldtk, reactimate-physics
 
-allow-newer: hashable, base
+allow-newer: hashable, vector-space
+

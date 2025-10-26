@@ -262,10 +262,12 @@ data Switch s es a b = Switch (IORef (a -> Step s b)) (IORef (Context es s))
 newSwitch :: (Setup es s (a -> Step s b)) -> Setup es s (Switch s es a b)
 newSwitch signal = Setup $ \ctx@Context {handles, finalizer = globalFinalizer} -> do
   initialFin <- newFinalizer
-  initialF <- unSetup signal ctx
 
+  let initialContext = Context handles initialFin
+  initialF <- unSetup signal initialContext
   signalRef <- newIORef initialF
-  contextRef <- newIORef $ Context handles initialFin
+  contextRef <- newIORef initialContext
+
   addFinalizer
     globalFinalizer
     (readIORef contextRef >>= runFinalizer . (\Context {finalizer} -> finalizer))
@@ -279,12 +281,11 @@ newSwitch signal = Setup $ \ctx@Context {handles, finalizer = globalFinalizer} -
 -- - 'runSwitch' will use the new signal.
 updateSwitch :: Switch s es a b -> (Setup es s (a -> Step s b)) -> Step s ()
 updateSwitch (Switch signalRef contextRef) signal = Step $ do
-  newFin <- newFinalizer
   Context {handles, finalizer = oldFin} <- readIORef contextRef
   runFinalizer oldFin
+  newFin <- newFinalizer
   newF <- unSetup signal (Context handles newFin)
   writeIORef signalRef newF
-  readIORef contextRef >>= runFinalizer . (\Context {finalizer} -> finalizer)
   writeIORef contextRef (Context handles $ coerce newFin)
 
 -- | Run the active signal for the 'Switch'.

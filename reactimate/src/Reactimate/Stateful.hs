@@ -1,3 +1,6 @@
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NoFieldSelectors #-}
+
 module Reactimate.Stateful
   ( feedback,
     feedbackState,
@@ -5,6 +8,14 @@ module Reactimate.Stateful
     scan,
     sumUp,
     delay,
+    Var,
+    asVar,
+    makeVar,
+    readVar,
+    writeVar,
+    -- WriteVar,
+    -- makeWriteVar,
+    -- write
   )
 where
 
@@ -66,3 +77,27 @@ delay initial = makeSignal $ do
     writeRef delayRef a'
     pure a
 {-# INLINE delay #-}
+
+data Var s a = Var {read :: Step s a, write :: a -> Step s ()}
+
+asVar :: Ref s a -> Var s a
+asVar ref = Var (readRef ref) (writeRef ref)
+
+makeVar :: Step s a -> (a -> Step s ()) -> Var s a
+makeVar read write = Var read write
+
+readVar :: Var s a -> Step s a
+readVar (Var read _) = read
+
+writeVar :: Var s a -> a -> Step s ()
+writeVar (Var {write}) = write
+
+-- newtype ReadVar s a = ReadVar {read :: Step s a}
+
+-- makeReadVar :: Step s a -> ReadVar s a
+-- makeReadVar read = ReadVar read
+
+-- newtype WriteVar s a = WriteVar {write :: Step s a}
+
+-- makeWriteVar :: (a -> Step s ()) -> WriteVar s a
+-- makeWriteVar write = WriteVar write

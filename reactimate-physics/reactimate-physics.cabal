@@ -21,13 +21,14 @@ common common
         DuplicateRecordFields
         LambdaCase
     build-depends:    
-        base ^>=4.17.2.1,
+        base >=4.17.2.1,
         vector,
         linear,
         text,
         colour,
         reactimate,
-        containers
+        containers,
+        transformers
 
 library
     import:           common

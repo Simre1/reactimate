@@ -1,25 +1,26 @@
 # Reactimate
 
-`reactimate` is a library implementing the AFRP (Arrowized Functional Reactive Programming) paradigm. In contrast to other libraries, `reactimate` uses `IO` effects to increase performance and a concrete base type to eliminate typeclass performance problems. 
-In addition, `reactimate` has some support for pull-based FRP, making it possible to deal with events which happen in-between simulation cycles.
-
-**The explanations are out of date for the current version!**
+`reactimate` is a library implementing the AFRP paradigm. In contrast to other libraries, `reactimate` has a static representation for signals to increase performance and a concrete base type to eliminate typeclass performance problems.
 
 ## Signal
 
-The most important type is the `Signal`. A `Signal a b` represents a computation which uses `a` as input and produces `b` as output. `reactimate` implements a lot of combinators to work with those `Signal`s.
+The most important type is the `Signal`. A `Signal es a b` represents a computation which uses `a` as input and produces `b` as output. `reactimate` implements a lot of combinators to work with those `Signal`s.
 
 Here, we use the `arr` function from the `Arrow` typeclass to create a simple `Signal` from the `(+5)` function.
 ```haskell
-add5 :: Signal Int Int
+add5 :: Signal es Int Int
 add5 = arr (+5)
 ```
 
 We can easily execute signals in sequence with the `>>>` combinator.
 ```haskell
-add10 :: Signal Int Int
+add10 :: Signal es Int Int
 add10 = add5 >>> add5
 ```
+
+## Effects
+
+Usually, a `Signal` cannot execute side-effects. However, the effect list `es` can be used to store effect handles which can be used to run them.
 
 ### Running signals
 
@@ -27,7 +28,7 @@ Typically, you will run `Signal`s with `reactimate`. It will run the given `Sign
 ```haskell
 main :: IO ()
 main = do
-  result <- reactimate someSignal
+  result <- runSetup $ reactimate someSignal
   putStrLn result
 
 someSignal :: Signal () (Maybe String)
@@ -74,7 +75,7 @@ main = reactimateEvent $ Nothing <$ increasingEvent
 
 ## Microbenchmarks
 
-Beware that micro benchmarks may not reflect 1 to 1 on real applications. The actual performance gain on applications still needs to be tested.
+Beware that micro benchmarks may not reflect 1 to 1 on real applications. The actual performance gain on applications still needs to be tested. Still, we can see that `reactimate` has lower overhead than other libraries.
 
 ```
 Countdown benchmark

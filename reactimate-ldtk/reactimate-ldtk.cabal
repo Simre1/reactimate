@@ -20,7 +20,7 @@ common common
         DuplicateRecordFields
         OverloadedRecordDot
     build-depends:
-        base ^>=4.17.2.1
+        base >=4.17.2.1
         
 
 library
@@ -29,7 +29,6 @@ library
         Reactimate.LDtk
     hs-source-dirs:   src
     build-depends:    
-        base ^>=4.17.2.1,
         reactimate,
         reactimate-game,
         vector,

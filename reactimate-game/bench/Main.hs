@@ -9,8 +9,8 @@ import Reactimate
 import Reactimate.Game
 import Test.Tasty.Bench
 
-renderRectangles :: GameEnv -> Signal Int ()
-renderRectangles gameEnv = constant (camera, picture) >>> renderGame gameEnv
+renderRectangles :: Graphics :> es => Signal es Int ()
+renderRectangles = constant (camera, picture) >>> renderGame 
   where
     rectsAmount = 1000
     camera = Camera (V2 0 300) (V2 rectsAmount 20)
@@ -21,6 +21,6 @@ main :: IO ()
 main = do
   Test.Tasty.Bench.defaultMain
     [ bench "Render rectangles" $
-        nfIO $
-          sample (setupGame (GameConfig "Bench" defaultWindow maxBound) renderRectangles) [0 .. 360]
+        nfIO $ runSetup $ 
+          sample (runGame "Bench" defaultWindow maxBound renderRectangles) [0 .. 360]
     ]

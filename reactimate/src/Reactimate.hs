@@ -47,6 +47,13 @@ module Reactimate
     scan,
     delay,
 
+    -- ** Vars
+    Var,
+    writeVar,
+    readVar,
+    asVar,
+    makeVar,
+
     -- ** Mutable references
     Ref,
     newRef,

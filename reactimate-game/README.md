@@ -17,10 +17,9 @@ import Data.Colour.Names
 
 main :: IO ()
 main =
-  reactimate $
-  	limitSampleRate 60 $
-	    setupGame (GameConfig "Basic Example" defaultWindow) $ \gameEnv ->
-	        constant (Camera (V2 0 0) (V2 800 600), picture) >>> render gameEnv >>> constant Nothing
+  runSetup $ reactimate $
+	    runGame "Basic Example" defaultWindow 60 $
+	        constant (Camera (V2 0 0) (V2 800 600), picture) >>> renderGame >>> constant Nothing
 
 picture :: Picture
 picture = makePicture 0 $ drawRectangle (packColour red) $ Rectangle (V2 0 0) (V2 500 300)
