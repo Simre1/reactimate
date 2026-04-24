@@ -169,7 +169,7 @@ makeSignal :: (forall s. Setup es s (a -> Step s b)) -> Signal es a b
 makeSignal f = Signal f
 
 -- | Inherits the scope for creating signals. This can be useful when you need to mix functions which take 'Signal's with 'Setup' code.
-inheritScope :: Setup es s ((Setup es s (a -> Step s b)) -> Signal es a b)
+inheritScope :: Setup es s (Setup es s (a -> Step s b) -> Signal es a b)
 inheritScope = pure (unsafeCoerce Signal)
 
 -- | Unwrap a signal function. A signal is a 'Setup' action which produces the 'Step' function.
