@@ -41,6 +41,14 @@ module Reactimate.Signal
     runPureSetup,
     runSetup,
     mapEffects,
+
+    -- * Still needs API rework 
+    newFinalizer,
+    runFinalizer,
+    addFinalizer,
+    Context(..),
+    Setup(..),
+    Step(..)
   )
 where
 
@@ -323,3 +331,4 @@ withFinalizer =
     newFinalizer
     runFinalizer
 {-# INLINE withFinalizer #-}
+
